@@ -988,6 +988,163 @@
       ctx.restore();
     }
 
+    function drawGroundShadow(x, y, rx, ry) {
+      ctx.save();
+      const g = ctx.createRadialGradient(x, y, 2, x, y, rx);
+      g.addColorStop(0, "rgba(0, 0, 0, 0.35)");
+      g.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawPlayerModel(p, primary) {
+      drawGroundShadow(p.x + 2, p.y + p.r + 8, p.r * 1.6, p.r * 0.62);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+
+      const bodyGrad = ctx.createRadialGradient(-p.r * 0.45, -p.r * 0.55, 2, 0, 0, p.r * 1.22);
+      bodyGrad.addColorStop(0, "#f4fbff");
+      bodyGrad.addColorStop(0.26, primary);
+      bodyGrad.addColorStop(0.7, "#1d5f89");
+      bodyGrad.addColorStop(1, "#0b263d");
+      ctx.fillStyle = bodyGrad;
+      ctx.shadowBlur = 22;
+      ctx.shadowColor = primary;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, p.r * 1.04, p.r * 0.95, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "rgba(16, 38, 64, 0.65)";
+      ctx.beginPath();
+      ctx.ellipse(2, 5, p.r * 0.88, p.r * 0.56, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      const visorGrad = ctx.createLinearGradient(-p.r * 0.46, -p.r * 0.2, p.r * 0.56, -p.r * 0.34);
+      visorGrad.addColorStop(0, "#f4ffff");
+      visorGrad.addColorStop(1, "#8be7ff");
+      ctx.fillStyle = visorGrad;
+      ctx.beginPath();
+      ctx.roundRect(-p.r * 0.56, -p.r * 0.43, p.r * 1.05, p.r * 0.4, p.r * 0.15);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.arc(-p.r * 0.25, -p.r * 0.34, p.r * 0.25, 0, Math.PI * 1.6);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawDroneModel(e, secondary) {
+      drawGroundShadow(e.x + 2, e.y + e.r + 8, e.r * 1.45, e.r * 0.58);
+      ctx.save();
+      ctx.translate(e.x, e.y);
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = secondary;
+
+      const shell = ctx.createRadialGradient(-e.r * 0.35, -e.r * 0.45, 2, 0, 0, e.r * 1.24);
+      shell.addColorStop(0, "#ffeefa");
+      shell.addColorStop(0.32, secondary);
+      shell.addColorStop(1, "#52103a");
+      ctx.fillStyle = shell;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, e.r * 1.05, e.r * 0.92, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#1b0f28cc";
+      ctx.beginPath();
+      ctx.ellipse(0, e.r * 0.15, e.r * 0.72, e.r * 0.42, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-e.r * 0.7, -e.r * 0.2);
+      ctx.lineTo(e.r * 0.7, -e.r * 0.35);
+      ctx.stroke();
+
+      ctx.fillStyle = "#ffe5f3";
+      ctx.beginPath();
+      ctx.arc(-e.r * 0.2, -e.r * 0.4, e.r * 0.15, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawMutantModel(e) {
+      drawGroundShadow(e.x + 3, e.y + e.r + 9, e.r * 1.5, e.r * 0.66);
+      ctx.save();
+      ctx.translate(e.x, e.y);
+      ctx.shadowBlur = 16;
+      ctx.shadowColor = "#ff7a40";
+
+      const skin = ctx.createRadialGradient(-e.r * 0.25, -e.r * 0.45, 1, 0, 0, e.r * 1.3);
+      skin.addColorStop(0, "#ffd8bf");
+      skin.addColorStop(0.34, "#ff985f");
+      skin.addColorStop(1, "#6b1f15");
+      ctx.fillStyle = skin;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, e.r * 1.08, e.r * 0.84, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#0000002e";
+      ctx.beginPath();
+      ctx.ellipse(e.r * 0.15, e.r * 0.18, e.r * 0.7, e.r * 0.35, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#2c1115";
+      ctx.beginPath();
+      ctx.ellipse(e.r * 0.28, -e.r * 0.18, e.r * 0.12, e.r * 0.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#fff3ea";
+      ctx.beginPath();
+      ctx.arc(-e.r * 0.16, -e.r * 0.34, e.r * 0.1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawTurretModel(e) {
+      drawGroundShadow(e.x + 3, e.y + e.r + 8, e.r * 1.5, e.r * 0.58);
+      ctx.save();
+      ctx.translate(e.x, e.y);
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = "#ffb24f";
+
+      const steel = ctx.createLinearGradient(-e.r, -e.r, e.r, e.r);
+      steel.addColorStop(0, "#ffe3be");
+      steel.addColorStop(0.4, "#ce8947");
+      steel.addColorStop(1, "#543118");
+      ctx.fillStyle = steel;
+      ctx.beginPath();
+      ctx.roundRect(-e.r, -e.r, e.r * 2, e.r * 2, e.r * 0.22);
+      ctx.fill();
+
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#251106cc";
+      ctx.beginPath();
+      ctx.roundRect(-e.r * 0.82, -e.r * 0.24, e.r * 1.64, e.r * 0.9, e.r * 0.18);
+      ctx.fill();
+
+      const turretHead = ctx.createRadialGradient(-e.r * 0.1, -e.r * 0.2, 2, 0, 0, e.r * 0.72);
+      turretHead.addColorStop(0, "#fff4d7");
+      turretHead.addColorStop(1, "#7d4a21");
+      ctx.fillStyle = turretHead;
+      ctx.beginPath();
+      ctx.arc(0, -e.r * 0.05, e.r * 0.48, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#311603";
+      ctx.fillRect(e.r * 0.05, -e.r * 0.12, e.r * 0.62, e.r * 0.22);
+      ctx.restore();
+    }
+
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -1013,50 +1170,43 @@
       const primary = css.getPropertyValue("--primary").trim();
       const secondary = css.getPropertyValue("--secondary").trim();
 
-      ctx.save();
-      ctx.shadowBlur = 26;
-      ctx.shadowColor = primary;
-      ctx.fillStyle = primary;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      drawPlayerModel(p, primary);
 
       for (const pickup of state.pickups) {
+        drawGroundShadow(pickup.x, pickup.y + pickup.r + 5, pickup.r * 1.1, pickup.r * 0.45);
         ctx.save();
-        ctx.fillStyle = "#8effcf";
-        ctx.shadowBlur = 16;
+        const pick = ctx.createRadialGradient(
+          pickup.x - pickup.r * 0.3,
+          pickup.y - pickup.r * 0.45,
+          1,
+          pickup.x,
+          pickup.y,
+          pickup.r * 1.1
+        );
+        pick.addColorStop(0, "#f3fff9");
+        pick.addColorStop(0.35, "#8effcf");
+        pick.addColorStop(1, "#1d7f65");
+        ctx.fillStyle = pick;
+        ctx.shadowBlur = 14;
         ctx.shadowColor = "#8effcf";
         ctx.beginPath();
         ctx.arc(pickup.x, pickup.y, pickup.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#ffffffcc";
+        ctx.beginPath();
+        ctx.arc(pickup.x - pickup.r * 0.32, pickup.y - pickup.r * 0.38, pickup.r * 0.2, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
 
       for (const e of state.enemies) {
-        ctx.save();
         if (e.type === "drone") {
-          ctx.fillStyle = secondary;
-          ctx.shadowBlur = 20;
-          ctx.shadowColor = secondary;
-          ctx.beginPath();
-          ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = "#ffffffa0";
-          ctx.lineWidth = 1;
-          ctx.stroke();
+          drawDroneModel(e, secondary);
         } else if (e.type === "mutant") {
-          ctx.fillStyle = "#ff834f";
-          ctx.shadowBlur = 20;
-          ctx.shadowColor = "#ff834f";
-          ctx.beginPath();
-          ctx.ellipse(e.x, e.y, e.r * 1.05, e.r * 0.82, 0, 0, Math.PI * 2);
-          ctx.fill();
+          drawMutantModel(e);
         } else {
-          ctx.fillStyle = "#ffb24f";
-          ctx.shadowBlur = 18;
-          ctx.shadowColor = "#ffb24f";
-          ctx.fillRect(e.x - e.r, e.y - e.r, e.r * 2, e.r * 2);
+          drawTurretModel(e);
+          ctx.save();
           if (e.lock > 0) {
             ctx.strokeStyle = "#ffdf84";
             ctx.lineWidth = 1.5;
@@ -1065,14 +1215,19 @@
             ctx.lineTo(e.aimX, e.aimY);
             ctx.stroke();
           }
+          ctx.restore();
         }
-        ctx.restore();
       }
 
       for (const s of state.shots) {
+        drawGroundShadow(s.x + 1, s.y + s.r + 3, s.r * 1.3, s.r * 0.55);
         ctx.save();
-        ctx.fillStyle = "#ffc966";
-        ctx.shadowBlur = 15;
+        const shot = ctx.createRadialGradient(s.x - 1.5, s.y - 1.5, 1, s.x, s.y, s.r * 1.8);
+        shot.addColorStop(0, "#fff7db");
+        shot.addColorStop(0.4, "#ffc966");
+        shot.addColorStop(1, "#8f4f13");
+        ctx.fillStyle = shot;
+        ctx.shadowBlur = 13;
         ctx.shadowColor = "#ffc966";
         ctx.beginPath();
         ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
