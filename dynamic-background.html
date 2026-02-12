@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dynamic Background Demo</title>
+  <style>
+    :root {
+      --hue-a: 200;
+      --hue-b: 320;
+      --hue-c: 120;
+      --bg-speed: 12s;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: #ffffff;
+      overflow: hidden;
+    }
+
+    body {
+      position: relative;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 20% 20%, hsla(var(--hue-a), 85%, 62%, 0.55), transparent 35%),
+        radial-gradient(circle at 80% 25%, hsla(var(--hue-b), 85%, 62%, 0.45), transparent 35%),
+        radial-gradient(circle at 50% 85%, hsla(var(--hue-c), 85%, 52%, 0.45), transparent 35%),
+        linear-gradient(135deg, #0f172a, #111827 45%, #0b1023);
+      animation: pulse var(--bg-speed) ease-in-out infinite alternate;
+    }
+
+    .content {
+      text-align: center;
+      z-index: 2;
+      padding: 1.5rem;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 14px;
+      backdrop-filter: blur(10px);
+      background: rgba(15, 23, 42, 0.35);
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.28);
+    }
+
+    .content h1 {
+      margin: 0 0 0.5rem;
+      font-size: clamp(1.8rem, 5vw, 3rem);
+      letter-spacing: 0.04em;
+    }
+
+    .content p {
+      margin: 0;
+      opacity: 0.9;
+      font-size: clamp(0.95rem, 2.5vw, 1.1rem);
+    }
+
+    .orb {
+      position: absolute;
+      width: 28vmax;
+      height: 28vmax;
+      border-radius: 50%;
+      filter: blur(40px);
+      opacity: 0.28;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      z-index: 1;
+      transform: translate(-50%, -50%);
+    }
+
+    .orb:nth-child(1) { background: hsl(190 95% 60%); }
+    .orb:nth-child(2) { background: hsl(320 95% 60%); }
+    .orb:nth-child(3) { background: hsl(110 95% 55%); }
+
+    @keyframes pulse {
+      0% {
+        filter: hue-rotate(0deg) saturate(1);
+      }
+      100% {
+        filter: hue-rotate(70deg) saturate(1.2);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="orb"></div>
+  <div class="orb"></div>
+  <div class="orb"></div>
+
+  <main class="content">
+    <h1>Dynamic Background</h1>
+    <p>Animated gradients + floating glow orbs.</p>
+  </main>
+
+  <script>
+    const orbs = [...document.querySelectorAll('.orb')];
+
+    function animate(time) {
+      orbs.forEach((orb, i) => {
+        const speed = 0.0002 + i * 0.00008;
+        const x = 50 + 30 * Math.cos(time * speed + i * 2.1);
+        const y = 50 + 30 * Math.sin(time * speed * 1.15 + i * 1.7);
+
+        orb.style.left = `${x}%`;
+        orb.style.top = `${y}%`;
+      });
+
+      requestAnimationFrame(animate);
+    }
+
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>

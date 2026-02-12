@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neon Dodge</title>
+  <style>
+    :root {
+      --bg-1: #041126;
+      --bg-2: #071c37;
+      --ink: #d8f3ff;
+      --accent: #29f0b4;
+      --danger: #ff5b7a;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 600px at 10% 0%, #0d2d5e 0, transparent 70%),
+        radial-gradient(1000px 500px at 90% 100%, #0b3f46 0, transparent 60%),
+        linear-gradient(160deg, var(--bg-1), var(--bg-2));
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+    }
+
+    .wrap {
+      width: min(94vw, 860px);
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      text-shadow: 0 0 14px #0cbf90aa;
+    }
+
+    canvas {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      border: 2px solid #3be7b855;
+      border-radius: 14px;
+      background: linear-gradient(180deg, #031329, #081021);
+      box-shadow: 0 24px 45px #00000066, inset 0 0 30px #0df3b21f;
+      display: block;
+    }
+
+    .hint {
+      margin-top: 10px;
+      opacity: 0.85;
+      font-size: 0.95rem;
+    }
+
+    .btn {
+      border: 1px solid #37eab1;
+      color: #e8fffa;
+      background: #0a3b37;
+      border-radius: 8px;
+      padding: 0.35rem 0.6rem;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .btn:hover { filter: brightness(1.12); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div>Neon Dodge</div>
+      <div>
+        <button id="restart" class="btn">Restart</button>
+      </div>
+    </div>
+    <canvas id="game" width="960" height="540" aria-label="Neon Dodge game area"></canvas>
+    <div class="hint">Move with Arrow Keys or WASD. Survive as long as possible.</div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const restartButton = document.getElementById("restart");
+
+    const state = {
+      player: { x: 120, y: 270, r: 14, speed: 5 },
+      enemies: [],
+      keys: new Set(),
+      score: 0,
+      best: Number(localStorage.getItem("neon_dodge_best") || 0),
+      spawnTimer: 0,
+      running: true,
+      tick: 0,
+    };
+
+    function reset() {
+      state.player.x = 120;
+      state.player.y = canvas.height / 2;
+      state.enemies = [];
+      state.score = 0;
+      state.spawnTimer = 0;
+      state.running = true;
+      state.tick = 0;
+    }
+
+    function spawnEnemy() {
+      const size = 12 + Math.random() * 22;
+      const speed = 3 + Math.random() * 4 + state.score / 300;
+      state.enemies.push({
+        x: canvas.width + size,
+        y: size + Math.random() * (canvas.height - size * 2),
+        r: size,
+        speed,
+      });
+    }
+
+    function update() {
+      if (!state.running) return;
+
+      state.tick += 1;
+      state.spawnTimer -= 1;
+      if (state.spawnTimer <= 0) {
+        spawnEnemy();
+        state.spawnTimer = Math.max(18, 45 - Math.floor(state.score / 80));
+      }
+
+      const p = state.player;
+      if (state.keys.has("arrowup") || state.keys.has("w")) p.y -= p.speed;
+      if (state.keys.has("arrowdown") || state.keys.has("s")) p.y += p.speed;
+      if (state.keys.has("arrowleft") || state.keys.has("a")) p.x -= p.speed;
+      if (state.keys.has("arrowright") || state.keys.has("d")) p.x += p.speed;
+
+      p.x = Math.max(p.r, Math.min(canvas.width - p.r, p.x));
+      p.y = Math.max(p.r, Math.min(canvas.height - p.r, p.y));
+
+      for (let i = state.enemies.length - 1; i >= 0; i -= 1) {
+        const e = state.enemies[i];
+        e.x -= e.speed;
+
+        const dx = p.x - e.x;
+        const dy = p.y - e.y;
+        const hit = Math.hypot(dx, dy) <= p.r + e.r;
+
+        if (hit) {
+          state.running = false;
+          state.best = Math.max(state.best, Math.floor(state.score));
+          localStorage.setItem("neon_dodge_best", String(state.best));
+          break;
+        }
+
+        if (e.x + e.r < 0) {
+          state.enemies.splice(i, 1);
+        }
+      }
+
+      state.score += 1;
+    }
+
+    function drawGrid() {
+      ctx.save();
+      ctx.globalAlpha = 0.22;
+      ctx.strokeStyle = "#24cc9f";
+      ctx.lineWidth = 1;
+      const gap = 36;
+      const shift = (state.tick * 0.7) % gap;
+
+      for (let x = -gap + shift; x < canvas.width + gap; x += gap) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += gap) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      g.addColorStop(0, "#031527");
+      g.addColorStop(1, "#070f1d");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      drawGrid();
+
+      const p = state.player;
+      ctx.fillStyle = "#29f0b4";
+      ctx.shadowBlur = 25;
+      ctx.shadowColor = "#29f0b4";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowBlur = 0;
+      for (const e of state.enemies) {
+        ctx.fillStyle = "#ff5b7a";
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = "#ff5b7a";
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+
+      ctx.fillStyle = "#d8f3ff";
+      ctx.font = "700 26px Trebuchet MS, Segoe UI, sans-serif";
+      ctx.fillText(`Score: ${Math.floor(state.score)}`, 18, 38);
+      ctx.fillText(`Best: ${state.best}`, 18, 72);
+
+      if (!state.running) {
+        ctx.fillStyle = "#000000b0";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.font = "700 56px Trebuchet MS, Segoe UI, sans-serif";
+        ctx.fillText("Game Over", canvas.width / 2, canvas.height / 2 - 20);
+        ctx.font = "700 24px Trebuchet MS, Segoe UI, sans-serif";
+        ctx.fillText("Press R or Restart", canvas.width / 2, canvas.height / 2 + 26);
+        ctx.textAlign = "left";
+      }
+    }
+
+    function frame() {
+      update();
+      draw();
+      requestAnimationFrame(frame);
+    }
+
+    window.addEventListener("keydown", (event) => {
+      const key = event.key.toLowerCase();
+      state.keys.add(key);
+      if (!state.running && key === "r") reset();
+    });
+
+    window.addEventListener("keyup", (event) => {
+      state.keys.delete(event.key.toLowerCase());
+    });
+
+    restartButton.addEventListener("click", reset);
+
+    frame();
+  </script>
+</body>
+</html>
