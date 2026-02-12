@@ -262,6 +262,7 @@
 
     <footer class="status">
       <span id="help">Move with Arrow Keys / WASD, press R to restart.</span>
+      <span id="missionState">Objective: Sync signal</span>
       <span id="biomeState">Zone: Neon City</span>
       <span id="batteryState">Battery: 100%</span>
       <span id="audioState">Audio: Off</span>
@@ -276,6 +277,7 @@
     const restartButton = document.getElementById("restart");
     const themeSelect = document.getElementById("themeSelect");
     const musicSelect = document.getElementById("musicSelect");
+    const missionState = document.getElementById("missionState");
     const biomeState = document.getElementById("biomeState");
     const batteryState = document.getElementById("batteryState");
     const audioState = document.getElementById("audioState");
@@ -300,6 +302,11 @@
       biome: "city",
       biomeTimer: 1600,
       battery: 100,
+      missionsCompleted: 0,
+      missionPhase: "travel",
+      missionProgress: 0,
+      missionTarget: 700,
+      extraction: null,
       cause: "",
     };
 
@@ -348,6 +355,16 @@
     }
 
     function updateHud() {
+      if (state.missionPhase === "travel") {
+        const pct = Math.min(100, Math.floor((state.missionProgress / state.missionTarget) * 100));
+        missionState.textContent = `Objective: Sync signal ${pct}%`;
+      } else {
+        const holdPct = state.extraction
+          ? Math.min(100, Math.floor((state.extraction.hold / state.extraction.holdNeed) * 100))
+          : 0;
+        const timer = state.extraction ? Math.ceil(state.extraction.timer / 60) : 0;
+        missionState.textContent = `Objective: Reach extraction ${holdPct}% (${timer}s)`;
+      }
       biomeState.textContent = `Zone: ${zoneName()}`;
       batteryState.textContent = `Battery: ${Math.round(state.battery)}%`;
       batteryState.style.color = state.battery < 22 ? "var(--danger)" : "var(--muted)";
@@ -512,6 +529,37 @@
       burst(canvas.width * 0.72, canvas.height * 0.24, state.biome === "city" ? "#23f7ff" : "#d8ffe8");
     }
 
+    function startExtraction() {
+      const h = 96;
+      const w = 128;
+      const y = 68 + Math.random() * (canvas.height - h - 136);
+      state.extraction = {
+        x: canvas.width - 180,
+        y,
+        w,
+        h,
+        hold: 0,
+        holdNeed: 96,
+        timer: 820,
+      };
+      state.missionPhase = "extract";
+      burst(canvas.width - 120, y + h * 0.5, "#8dd7ff");
+    }
+
+    function completeExtraction() {
+      state.missionsCompleted += 1;
+      state.missionPhase = "travel";
+      state.missionProgress = 0;
+      state.missionTarget = Math.min(1700, 700 + state.missionsCompleted * 170);
+      state.battery = Math.min(100, state.battery + 16);
+      state.extraction = null;
+      if (state.enemies.length > 6) {
+        state.enemies.splice(0, Math.floor(state.enemies.length * 0.45));
+      }
+      burst(state.player.x + 40, state.player.y, "#23f7ff");
+      burst(state.player.x + 70, state.player.y - 20, "#8effcf");
+    }
+
     function reset() {
       state.player.x = 120;
       state.player.y = canvas.height / 2;
@@ -531,7 +579,51 @@
       state.biome = "city";
       state.biomeTimer = 1600;
       state.battery = 100;
+      state.missionsCompleted = 0;
+      state.missionPhase = "travel";
+      state.missionProgress = 0;
+      state.missionTarget = 700;
+      state.extraction = null;
       state.cause = "";
+    }
+
+    function updateMission() {
+      if (!state.running) return;
+
+      if (state.missionPhase === "travel") {
+        state.missionProgress += 1 + state.score / 4000;
+        if (state.missionProgress >= state.missionTarget) {
+          startExtraction();
+        }
+        return;
+      }
+
+      if (!state.extraction) {
+        startExtraction();
+        return;
+      }
+
+      state.extraction.timer -= 1;
+      if (state.extraction.timer <= 0) {
+        endRun("Missed extraction window");
+        return;
+      }
+
+      const e = state.extraction;
+      const px = state.player.x;
+      const py = state.player.y;
+      const inside = px > e.x && px < e.x + e.w && py > e.y && py < e.y + e.h;
+
+      if (inside) {
+        e.hold = Math.min(e.holdNeed, e.hold + 1.4);
+        if (state.tick % 4 === 0) burst(px + Math.random() * 8, py + Math.random() * 8, "#8de5ff");
+      } else {
+        e.hold = Math.max(0, e.hold - 1);
+      }
+
+      if (e.hold >= e.holdNeed) {
+        completeExtraction();
+      }
     }
 
     function spawnEnemy() {
@@ -817,6 +909,7 @@
           state.battery = Math.min(100, state.battery + 0.045);
         }
 
+        updateMission();
         updateWeather();
         updatePickups();
         updateEnemies();
@@ -987,6 +1080,24 @@
         }
       }
 
+      if (state.extraction) {
+        const e = state.extraction;
+        const pulse = 0.25 + 0.2 * Math.sin(state.tick * 0.12);
+        ctx.save();
+        ctx.strokeStyle = "#9be9ff";
+        ctx.fillStyle = `rgba(126, 220, 255, ${0.12 + pulse})`;
+        ctx.lineWidth = 2;
+        ctx.fillRect(e.x, e.y, e.w, e.h);
+        ctx.strokeRect(e.x, e.y, e.w, e.h);
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(e.x - 8, e.y - 8, e.w + 16, e.h + 16);
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#d9f6ff";
+        ctx.font = "700 16px Chakra Petch, sans-serif";
+        ctx.fillText("EXTRACTION", e.x + 10, e.y - 12);
+        ctx.restore();
+      }
+
       for (const part of state.particles) {
         ctx.save();
         ctx.globalAlpha = Math.max(0, part.life / 35);
@@ -1004,6 +1115,24 @@
       ctx.font = "700 18px Chakra Petch, sans-serif";
       ctx.fillText(zoneName(), 18, 102);
       ctx.fillText(`Battery ${Math.round(state.battery)}%`, 18, 124);
+      ctx.fillText(`Missions ${state.missionsCompleted}`, 18, 146);
+
+      if (state.extraction) {
+        const e = state.extraction;
+        const barX = canvas.width - 250;
+        const barY = 18;
+        const barW = 220;
+        const holdPct = e.hold / e.holdNeed;
+        ctx.fillStyle = darkTheme ? "#0f1a2f" : "#c6dbf0";
+        ctx.fillRect(barX, barY, barW, 14);
+        ctx.fillStyle = "#8adfff";
+        ctx.fillRect(barX, barY, barW * holdPct, 14);
+        ctx.strokeStyle = darkTheme ? "#cbf4ff" : "#24508b";
+        ctx.strokeRect(barX, barY, barW, 14);
+        ctx.fillStyle = darkTheme ? "#dff8ff" : "#13254a";
+        ctx.font = "700 14px Chakra Petch, sans-serif";
+        ctx.fillText(`Extraction hold ${Math.floor(holdPct * 100)}%`, barX, barY + 30);
+      }
 
       if (state.biome === "metro") {
         const lightStrength = 100 + state.battery * 3.2;
@@ -1037,6 +1166,7 @@
         const reason = state.cause ? `Cause: ${state.cause}` : "Press R or Restart";
         ctx.fillText(reason, canvas.width / 2, canvas.height / 2 + 20);
         ctx.fillText("Press R or Restart", canvas.width / 2, canvas.height / 2 + 54);
+        ctx.fillText(`Missions completed: ${state.missionsCompleted}`, canvas.width / 2, canvas.height / 2 + 88);
         ctx.textAlign = "left";
       }
     }
