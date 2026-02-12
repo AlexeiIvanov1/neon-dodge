@@ -267,10 +267,11 @@
     </section>
 
     <footer class="status">
-      <span id="help">Move with Arrow Keys / WASD, press R to restart.</span>
+      <span id="help">Move: WASD/Arrows, Fire: Mouse or Space/F, Restart: R.</span>
       <span id="missionState">Objective: Sync signal</span>
       <span id="biomeState">Zone: Neon City</span>
       <span id="batteryState">Battery: 100%</span>
+      <span id="weaponState">Weapon: 12/12</span>
       <span id="audioState">Audio: Off</span>
     </footer>
   </main>
@@ -287,14 +288,16 @@
     const missionState = document.getElementById("missionState");
     const biomeState = document.getElementById("biomeState");
     const batteryState = document.getElementById("batteryState");
+    const weaponState = document.getElementById("weaponState");
     const audioState = document.getElementById("audioState");
 
     const THEME_KEY = "neon_dodge_theme";
     const BIOME_MODE_KEY = "neon_dodge_biome_mode";
 
     const state = {
-      player: { x: 120, y: 270, r: 14, speed: 5.3, facingX: 1, facingY: 0 },
+      player: { x: 120, y: 270, r: 14, speed: 5.3, facingX: 1, facingY: 0, aimX: null, aimY: null },
       enemies: [],
+      playerShots: [],
       particles: [],
       pickups: [],
       shots: [],
@@ -316,6 +319,16 @@
       missionProgress: 0,
       missionTarget: 700,
       extraction: null,
+      firing: false,
+      weapon: {
+        ammo: 12,
+        ammoMax: 12,
+        reloadTimer: 0,
+        reloadDuration: 96,
+        fireCooldown: 0,
+        fireRate: 8,
+        damage: 1,
+      },
       cause: "",
     };
 
@@ -391,6 +404,13 @@
       biomeState.textContent = `Zone: ${zoneName()}`;
       batteryState.textContent = `Battery: ${Math.round(state.battery)}%`;
       batteryState.style.color = state.battery < 22 ? "var(--danger)" : "var(--muted)";
+      if (state.weapon.reloadTimer > 0) {
+        weaponState.textContent = `Weapon: Reloading ${Math.ceil(state.weapon.reloadTimer / 60)}s`;
+        weaponState.style.color = "var(--danger)";
+      } else {
+        weaponState.textContent = `Weapon: ${state.weapon.ammo}/${state.weapon.ammoMax}`;
+        weaponState.style.color = state.weapon.ammo <= 3 ? "var(--danger)" : "var(--muted)";
+      }
     }
 
     function resizeMatrix() {
@@ -539,6 +559,7 @@
     function endRun(cause) {
       if (!state.running) return;
       state.running = false;
+      state.firing = false;
       state.cause = cause;
       state.best = Math.max(state.best, Math.floor(state.score));
       localStorage.setItem("neon_dodge_best", String(state.best));
@@ -589,7 +610,10 @@
       state.player.y = canvas.height / 2;
       state.player.facingX = 1;
       state.player.facingY = 0;
+      state.player.aimX = null;
+      state.player.aimY = null;
       state.enemies = [];
+      state.playerShots = [];
       state.particles = [];
       state.pickups = [];
       state.shots = [];
@@ -608,6 +632,10 @@
       state.missionProgress = 0;
       state.missionTarget = 700;
       state.extraction = null;
+      state.firing = false;
+      state.weapon.ammo = state.weapon.ammoMax;
+      state.weapon.reloadTimer = 0;
+      state.weapon.fireCooldown = 0;
       state.cause = "";
     }
 
@@ -672,6 +700,7 @@
         x: canvas.width + r,
         y: r + Math.random() * (canvas.height - r * 2),
         r,
+        hp: type === "mutant" ? 3 : (type === "turret" ? 4 : 2),
         speed: speedByType[type] + Math.random() * 1.7 + state.score / 500,
         phase: Math.random() * Math.PI * 2,
         cooldown: 90 + Math.random() * 80,
@@ -696,6 +725,92 @@
         r: 4,
       });
       burst(enemy.x, enemy.y, "#ff9b4f");
+    }
+
+    function getPlayerAimAngle() {
+      const p = state.player;
+      const ax = p.aimX;
+      const ay = p.aimY;
+      if (typeof ax === "number" && typeof ay === "number") {
+        return Math.atan2(ay - p.y, ax - p.x);
+      }
+      return Math.atan2(p.facingY || 0, p.facingX || 1);
+    }
+
+    function firePlayerShot() {
+      if (!state.running) return;
+      const w = state.weapon;
+      if (w.reloadTimer > 0 || w.fireCooldown > 0) return;
+
+      if (w.ammo <= 0) {
+        w.reloadTimer = w.reloadDuration;
+        return;
+      }
+
+      const p = state.player;
+      const angle = getPlayerAimAngle();
+      state.playerShots.push({
+        x: p.x + Math.cos(angle) * (p.r + 4),
+        y: p.y + Math.sin(angle) * (p.r + 4),
+        vx: Math.cos(angle) * 10.2,
+        vy: Math.sin(angle) * 10.2,
+        r: 3.2,
+        damage: w.damage,
+      });
+      w.ammo -= 1;
+      w.fireCooldown = w.fireRate;
+      burst(p.x + Math.cos(angle) * (p.r + 3), p.y + Math.sin(angle) * (p.r + 3), "#fff5c1");
+      if (w.ammo <= 0) {
+        w.reloadTimer = w.reloadDuration;
+      }
+    }
+
+    function updateWeapon() {
+      const w = state.weapon;
+      if (w.fireCooldown > 0) w.fireCooldown -= 1;
+      if (w.reloadTimer > 0) {
+        w.reloadTimer -= 1;
+        if (w.reloadTimer <= 0) {
+          w.ammo = w.ammoMax;
+          w.reloadTimer = 0;
+        }
+      }
+      if (state.firing) firePlayerShot();
+    }
+
+    function updatePlayerShots() {
+      for (let i = state.playerShots.length - 1; i >= 0; i -= 1) {
+        const s = state.playerShots[i];
+        s.x += s.vx;
+        s.y += s.vy;
+
+        let hit = false;
+        for (let j = state.enemies.length - 1; j >= 0; j -= 1) {
+          const e = state.enemies[j];
+          const dx = e.x - s.x;
+          const dy = e.y - s.y;
+          if (Math.hypot(dx, dy) <= e.r + s.r) {
+            e.hp -= s.damage;
+            burst(s.x, s.y, "#ffdca1");
+            hit = true;
+            if (e.hp <= 0) {
+              burst(e.x, e.y, "#ffb07a");
+              state.score += 26;
+              state.enemies.splice(j, 1);
+            }
+            break;
+          }
+        }
+
+        if (hit) {
+          state.playerShots.splice(i, 1);
+          continue;
+        }
+
+        if (s.x < -30 || s.x > canvas.width + 30 || s.y < -30 || s.y > canvas.height + 30) {
+          state.playerShots.splice(i, 1);
+        }
+      }
     }
 
     function spawnWeatherEvent() {
@@ -938,6 +1053,8 @@
         updateMission();
         updateWeather();
         updatePickups();
+        updateWeapon();
+        updatePlayerShots();
         updateEnemies();
         updateShots();
 
@@ -949,6 +1066,8 @@
       } else {
         updateWeather();
         updatePickups();
+        updateWeapon();
+        updatePlayerShots();
         updateShots();
       }
 
@@ -1000,7 +1119,7 @@
       ctx.restore();
     }
 
-    function drawPlayerModel(p, primary) {
+    function drawPlayerModel(p, primary, aimAngle) {
       drawGroundShadow(p.x + 2, p.y + p.r + 8, p.r * 1.6, p.r * 0.62);
       ctx.save();
       ctx.translate(p.x, p.y);
@@ -1036,6 +1155,17 @@
       ctx.beginPath();
       ctx.arc(-p.r * 0.25, -p.r * 0.34, p.r * 0.25, 0, Math.PI * 1.6);
       ctx.stroke();
+
+      ctx.rotate(aimAngle);
+      const gun = ctx.createLinearGradient(p.r * 0.2, -2, p.r * 1.05, 2);
+      gun.addColorStop(0, "#d0d7e4");
+      gun.addColorStop(1, "#4d596f");
+      ctx.fillStyle = gun;
+      ctx.beginPath();
+      ctx.roundRect(p.r * 0.1, -2.4, p.r * 0.96, 4.8, 2);
+      ctx.fill();
+      ctx.fillStyle = "#f1f7ff";
+      ctx.fillRect(p.r * 0.92, -1.2, 3.4, 2.4);
 
       ctx.restore();
     }
@@ -1200,11 +1330,28 @@
       drawGrid();
 
       const p = state.player;
+      const aimAngle = getPlayerAimAngle();
       const css = getComputedStyle(document.documentElement);
       const primary = css.getPropertyValue("--primary").trim();
       const secondary = css.getPropertyValue("--secondary").trim();
 
-      drawPlayerModel(p, primary);
+      drawPlayerModel(p, primary, aimAngle);
+
+      for (const s of state.playerShots) {
+        drawGroundShadow(s.x, s.y + s.r + 2, s.r * 1.15, s.r * 0.48);
+        ctx.save();
+        const pshot = ctx.createRadialGradient(s.x - 1, s.y - 1, 1, s.x, s.y, s.r * 1.6);
+        pshot.addColorStop(0, "#ffffff");
+        pshot.addColorStop(0.35, "#8be6ff");
+        pshot.addColorStop(1, "#1a82a8");
+        ctx.fillStyle = pshot;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = "#8be6ff";
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
 
       for (const pickup of state.pickups) {
         drawGroundShadow(pickup.x, pickup.y + pickup.r + 5, pickup.r * 1.1, pickup.r * 0.45);
@@ -1434,11 +1581,35 @@
     window.addEventListener("keydown", (event) => {
       const key = event.key.toLowerCase();
       state.keys.add(key);
+      if (key === " " || key === "f") {
+        event.preventDefault();
+        state.firing = true;
+      }
       if (!state.running && key === "r") reset();
     });
 
     window.addEventListener("keyup", (event) => {
-      state.keys.delete(event.key.toLowerCase());
+      const key = event.key.toLowerCase();
+      state.keys.delete(key);
+      if (key === " " || key === "f") {
+        state.firing = false;
+      }
+    });
+
+    canvas.addEventListener("mousemove", (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      state.player.aimX = (event.clientX - rect.left) * scaleX;
+      state.player.aimY = (event.clientY - rect.top) * scaleY;
+    });
+
+    canvas.addEventListener("mousedown", () => {
+      state.firing = true;
+    });
+
+    window.addEventListener("mouseup", () => {
+      state.firing = false;
     });
 
     restartButton.addEventListener("click", reset);
