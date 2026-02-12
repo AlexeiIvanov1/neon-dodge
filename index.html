@@ -262,6 +262,8 @@
 
     <footer class="status">
       <span id="help">Move with Arrow Keys / WASD, press R to restart.</span>
+      <span id="biomeState">Zone: Neon City</span>
+      <span id="batteryState">Battery: 100%</span>
       <span id="audioState">Audio: Off</span>
     </footer>
   </main>
@@ -274,27 +276,38 @@
     const restartButton = document.getElementById("restart");
     const themeSelect = document.getElementById("themeSelect");
     const musicSelect = document.getElementById("musicSelect");
+    const biomeState = document.getElementById("biomeState");
+    const batteryState = document.getElementById("batteryState");
     const audioState = document.getElementById("audioState");
 
     const THEME_KEY = "neon_dodge_theme";
 
     const state = {
-      player: { x: 120, y: 270, r: 14, speed: 5.3 },
+      player: { x: 120, y: 270, r: 14, speed: 5.3, facingX: 1, facingY: 0 },
       enemies: [],
       particles: [],
+      pickups: [],
+      shots: [],
+      weatherEvents: [],
       keys: new Set(),
       score: 0,
       best: Number(localStorage.getItem("neon_dodge_best") || 0),
       spawnTimer: 0,
+      pickupTimer: 420,
+      weatherCooldown: 320,
       running: true,
       tick: 0,
+      biome: "city",
+      biomeTimer: 1600,
+      battery: 100,
+      cause: "",
     };
 
     let audioCtx;
     let masterGain;
     let sequenceTimer;
     let beatIndex = 0;
-    let activeTrack = "off";
+
     const matrix = {
       fontSize: 16,
       chars: "01@#$%&*+-<>[]{}ABCDEFGHIJKLMNOPQRSTUVWXYZ".split(""),
@@ -328,6 +341,16 @@
       document.documentElement.setAttribute("data-theme", theme);
       themeSelect.value = theme;
       localStorage.setItem(THEME_KEY, theme);
+    }
+
+    function zoneName() {
+      return state.biome === "city" ? "Neon City" : "Metro Tunnel";
+    }
+
+    function updateHud() {
+      biomeState.textContent = `Zone: ${zoneName()}`;
+      batteryState.textContent = `Battery: ${Math.round(state.battery)}%`;
+      batteryState.style.color = state.battery < 22 ? "var(--danger)" : "var(--muted)";
     }
 
     function resizeMatrix() {
@@ -417,7 +440,6 @@
         clearInterval(sequenceTimer);
         sequenceTimer = null;
       }
-      activeTrack = "off";
       audioState.textContent = "Audio: Off";
     }
 
@@ -433,7 +455,6 @@
       const track = tracks[trackName];
       const stepMs = (60_000 / track.bpm) / 2;
       beatIndex = 0;
-      activeTrack = trackName;
       audioState.textContent = `Audio: ${musicSelect.options[musicSelect.selectedIndex].text}`;
 
       sequenceTimer = setInterval(() => {
@@ -442,11 +463,8 @@
         const leadStep = beatIndex % track.lead.length;
         const bassStep = beatIndex % track.bass.length;
 
-        const leadNote = track.lead[leadStep];
-        const bassNote = track.bass[bassStep];
-
-        const leadFreq = freqFromSemitone(220, leadNote);
-        const bassFreq = freqFromSemitone(110, bassNote);
+        const leadFreq = freqFromSemitone(220, track.lead[leadStep]);
+        const bassFreq = freqFromSemitone(110, track.bass[bassStep]);
 
         synthHit({ freq: leadFreq, time: now, dur: 0.16, type: "square", gain: 0.035 });
         synthHit({ freq: leadFreq * 2, time: now, dur: 0.08, type: "triangle", gain: 0.012, detune: 4 });
@@ -478,76 +496,341 @@
       }
     }
 
+    function endRun(cause) {
+      if (!state.running) return;
+      state.running = false;
+      state.cause = cause;
+      state.best = Math.max(state.best, Math.floor(state.score));
+      localStorage.setItem("neon_dodge_best", String(state.best));
+      burst(state.player.x, state.player.y, "#ff5b9f");
+    }
+
+    function switchBiome() {
+      state.biome = state.biome === "city" ? "metro" : "city";
+      state.biomeTimer = 1400 + Math.floor(Math.random() * 500);
+      state.weatherCooldown = 120 + Math.floor(Math.random() * 180);
+      burst(canvas.width * 0.72, canvas.height * 0.24, state.biome === "city" ? "#23f7ff" : "#d8ffe8");
+    }
+
     function reset() {
       state.player.x = 120;
       state.player.y = canvas.height / 2;
+      state.player.facingX = 1;
+      state.player.facingY = 0;
       state.enemies = [];
       state.particles = [];
+      state.pickups = [];
+      state.shots = [];
+      state.weatherEvents = [];
       state.score = 0;
       state.spawnTimer = 0;
+      state.pickupTimer = 420;
+      state.weatherCooldown = 320;
       state.running = true;
       state.tick = 0;
+      state.biome = "city";
+      state.biomeTimer = 1600;
+      state.battery = 100;
+      state.cause = "";
     }
 
     function spawnEnemy() {
-      const size = 10 + Math.random() * 24;
-      const speed = 3.1 + Math.random() * 4 + state.score / 330;
-      const laneWobble = Math.sin(state.tick * 0.025 + Math.random() * Math.PI) * 42;
+      const roll = Math.random();
+      const inCity = state.biome === "city";
+      let type = "drone";
+
+      if (inCity) {
+        if (roll > 0.72) type = "turret";
+        if (roll > 0.9) type = "mutant";
+      } else {
+        if (roll < 0.56) type = "mutant";
+        else if (roll > 0.8) type = "turret";
+      }
+
+      const radiusByType = { drone: 14, mutant: 19, turret: 16 };
+      const speedByType = { drone: 4.2, mutant: 3.25, turret: 2.8 };
+      const r = radiusByType[type] + Math.random() * 8;
+
       state.enemies.push({
-        x: canvas.width + size,
-        y: size + Math.random() * (canvas.height - size * 2) + laneWobble,
-        r: size,
-        speed,
+        type,
+        x: canvas.width + r,
+        y: r + Math.random() * (canvas.height - r * 2),
+        r,
+        speed: speedByType[type] + Math.random() * 1.7 + state.score / 500,
+        phase: Math.random() * Math.PI * 2,
+        cooldown: 90 + Math.random() * 80,
+        charge: 0,
+        chargeVy: 0,
+        fireCd: 70 + Math.random() * 80,
+        lock: 0,
+        aimX: 0,
+        aimY: 0,
       });
+    }
+
+    function spawnShot(enemy) {
+      const tx = enemy.aimX || state.player.x;
+      const ty = enemy.aimY || state.player.y;
+      const angle = Math.atan2(ty - enemy.y, tx - enemy.x);
+      state.shots.push({
+        x: enemy.x,
+        y: enemy.y,
+        vx: Math.cos(angle) * 6.2,
+        vy: Math.sin(angle) * 6.2,
+        r: 4,
+      });
+      burst(enemy.x, enemy.y, "#ff9b4f");
+    }
+
+    function spawnWeatherEvent() {
+      if (state.biome === "city") {
+        const width = 28 + Math.random() * 50;
+        state.weatherEvents.push({
+          type: "storm",
+          x: 140 + Math.random() * (canvas.width - 220),
+          width,
+          warn: 68,
+          strike: 22,
+        });
+      } else {
+        const r = 38 + Math.random() * 30;
+        state.weatherEvents.push({
+          type: "gas",
+          x: canvas.width + r,
+          y: 60 + Math.random() * (canvas.height - 120),
+          r,
+          life: 360,
+          drift: -(1.1 + Math.random() * 1.1),
+        });
+      }
+    }
+
+    function spawnBatteryPickup() {
+      state.pickups.push({
+        x: canvas.width + 22,
+        y: 60 + Math.random() * (canvas.height - 120),
+        r: 10,
+        amount: 26 + Math.random() * 20,
+      });
+    }
+
+    function updateWeather() {
+      if (state.running) {
+        state.weatherCooldown -= 1;
+        if (state.weatherCooldown <= 0) {
+          spawnWeatherEvent();
+          state.weatherCooldown = state.biome === "city"
+            ? 210 + Math.floor(Math.random() * 180)
+            : 170 + Math.floor(Math.random() * 160);
+        }
+      }
+
+      for (let i = state.weatherEvents.length - 1; i >= 0; i -= 1) {
+        const w = state.weatherEvents[i];
+
+        if (w.type === "storm") {
+          if (w.warn > 0) {
+            w.warn -= 1;
+          } else if (w.strike > 0) {
+            w.strike -= 1;
+            if (state.running && Math.abs(state.player.x - w.x) < w.width * 0.5) {
+              endRun("Electrocuted");
+            }
+          } else {
+            state.weatherEvents.splice(i, 1);
+          }
+        } else {
+          w.x += w.drift;
+          w.life -= 1;
+          const dx = state.player.x - w.x;
+          const dy = state.player.y - w.y;
+
+          if (state.running && Math.hypot(dx, dy) < w.r + state.player.r) {
+            state.battery = Math.max(0, state.battery - 0.36);
+            if (state.battery <= 0) endRun("Toxic exposure");
+          }
+
+          if (w.life <= 0 || w.x + w.r < -20) {
+            state.weatherEvents.splice(i, 1);
+          }
+        }
+      }
+    }
+
+    function updatePickups() {
+      if (state.running && state.biome === "metro") {
+        state.pickupTimer -= 1;
+        if (state.pickupTimer <= 0 && state.battery < 95) {
+          spawnBatteryPickup();
+          state.pickupTimer = 260 + Math.floor(Math.random() * 260);
+        }
+      }
+
+      for (let i = state.pickups.length - 1; i >= 0; i -= 1) {
+        const p = state.pickups[i];
+        p.x -= 1.6;
+        p.y += Math.sin((state.tick + i * 12) * 0.06) * 0.65;
+
+        const dx = state.player.x - p.x;
+        const dy = state.player.y - p.y;
+        if (state.running && Math.hypot(dx, dy) < state.player.r + p.r) {
+          state.battery = Math.min(100, state.battery + p.amount);
+          burst(p.x, p.y, "#8effcf");
+          state.pickups.splice(i, 1);
+          continue;
+        }
+
+        if (p.x + p.r < -16) state.pickups.splice(i, 1);
+      }
+    }
+
+    function updateShots() {
+      for (let i = state.shots.length - 1; i >= 0; i -= 1) {
+        const s = state.shots[i];
+        s.x += s.vx;
+        s.y += s.vy;
+
+        const dx = state.player.x - s.x;
+        const dy = state.player.y - s.y;
+        if (state.running && Math.hypot(dx, dy) < state.player.r + s.r) {
+          endRun("Sniped");
+        }
+
+        if (s.x < -20 || s.x > canvas.width + 20 || s.y < -20 || s.y > canvas.height + 20) {
+          state.shots.splice(i, 1);
+        }
+      }
+    }
+
+    function updateEnemies() {
+      const p = state.player;
+
+      for (let i = state.enemies.length - 1; i >= 0; i -= 1) {
+        const e = state.enemies[i];
+
+        if (e.type === "drone") {
+          e.x -= e.speed;
+          e.y += Math.sin((state.tick + e.phase * 40) * 0.095) * 1.7;
+        } else if (e.type === "mutant") {
+          if (e.charge > 0) {
+            e.charge -= 1;
+            e.x -= e.speed * 2.3;
+            e.y += e.chargeVy;
+          } else {
+            e.x -= e.speed * 0.85;
+            const pull = Math.sign(p.y - e.y) * Math.min(1.6, Math.abs(p.y - e.y) * 0.03);
+            e.y += pull;
+            e.cooldown -= 1;
+            if (e.cooldown <= 0 && e.x > p.x + 60) {
+              e.charge = 28;
+              e.chargeVy = (p.y - e.y) / 26;
+              e.cooldown = 85 + Math.random() * 75;
+            }
+          }
+        } else {
+          if (e.x > canvas.width * 0.78) e.x -= 1.5;
+          if (e.lock > 0) {
+            e.lock -= 1;
+            if (e.lock === 0) spawnShot(e);
+          } else {
+            e.fireCd -= 1;
+            if (e.fireCd <= 0) {
+              e.lock = 34;
+              e.aimX = p.x;
+              e.aimY = p.y;
+              e.fireCd = 92 + Math.random() * 70;
+            }
+          }
+        }
+
+        e.y = Math.max(e.r, Math.min(canvas.height - e.r, e.y));
+
+        const dx = p.x - e.x;
+        const dy = p.y - e.y;
+        if (state.running && Math.hypot(dx, dy) <= p.r + e.r) {
+          const reason = e.type === "mutant" ? "Mauled" : (e.type === "turret" ? "Crushed" : "Shredded");
+          endRun(reason);
+        }
+
+        if (e.x + e.r < -30) {
+          state.enemies.splice(i, 1);
+          burst(e.x, e.y, "#23f7ff");
+        }
+      }
     }
 
     function update() {
       if (state.running) {
         state.tick += 1;
         state.spawnTimer -= 1;
+        state.biomeTimer -= 1;
+
+        if (state.biomeTimer <= 0) {
+          switchBiome();
+        }
 
         if (state.spawnTimer <= 0) {
           spawnEnemy();
-          state.spawnTimer = Math.max(14, 42 - Math.floor(state.score / 90));
+          state.spawnTimer = Math.max(12, 36 - Math.floor(state.score / 120));
         }
 
         const p = state.player;
-        if (state.keys.has("arrowup") || state.keys.has("w")) p.y -= p.speed;
-        if (state.keys.has("arrowdown") || state.keys.has("s")) p.y += p.speed;
-        if (state.keys.has("arrowleft") || state.keys.has("a")) p.x -= p.speed;
-        if (state.keys.has("arrowright") || state.keys.has("d")) p.x += p.speed;
+        let moved = false;
+
+        if (state.keys.has("arrowup") || state.keys.has("w")) {
+          p.y -= p.speed;
+          p.facingX = 0;
+          p.facingY = -1;
+          moved = true;
+        }
+        if (state.keys.has("arrowdown") || state.keys.has("s")) {
+          p.y += p.speed;
+          p.facingX = 0;
+          p.facingY = 1;
+          moved = true;
+        }
+        if (state.keys.has("arrowleft") || state.keys.has("a")) {
+          p.x -= p.speed;
+          p.facingX = -1;
+          p.facingY = 0;
+          moved = true;
+        }
+        if (state.keys.has("arrowright") || state.keys.has("d")) {
+          p.x += p.speed;
+          p.facingX = 1;
+          p.facingY = 0;
+          moved = true;
+        }
+
+        if (!moved) {
+          p.facingX = 1;
+          p.facingY = 0;
+        }
 
         p.x = Math.max(p.r, Math.min(canvas.width - p.r, p.x));
         p.y = Math.max(p.r, Math.min(canvas.height - p.r, p.y));
 
-        for (let i = state.enemies.length - 1; i >= 0; i -= 1) {
-          const e = state.enemies[i];
-          e.x -= e.speed;
-          e.y += Math.sin((state.tick + i * 12) * 0.03) * 0.6;
-
-          const dx = p.x - e.x;
-          const dy = p.y - e.y;
-          const hit = Math.hypot(dx, dy) <= p.r + e.r;
-
-          if (hit) {
-            burst(p.x, p.y, "#ff5b9f");
-            state.running = false;
-            state.best = Math.max(state.best, Math.floor(state.score));
-            localStorage.setItem("neon_dodge_best", String(state.best));
-            break;
-          }
-
-          if (e.x + e.r < -8) {
-            state.enemies.splice(i, 1);
-            burst(e.x, e.y, "#23f7ff");
-          }
+        if (state.biome === "metro") {
+          state.battery = Math.max(0, state.battery - 0.03);
+          if (state.battery <= 0) endRun("Battery depleted");
+        } else {
+          state.battery = Math.min(100, state.battery + 0.045);
         }
+
+        updateWeather();
+        updatePickups();
+        updateEnemies();
+        updateShots();
 
         if (state.tick % 5 === 0) {
           burst(p.x - 8, p.y, "#23f7ff");
         }
 
         state.score += 1;
+      } else {
+        updateWeather();
+        updatePickups();
+        updateShots();
       }
 
       for (let i = state.particles.length - 1; i >= 0; i -= 1) {
@@ -559,11 +842,13 @@
         p.life -= 1;
         if (p.life <= 0) state.particles.splice(i, 1);
       }
+
+      updateHud();
     }
 
     function drawGrid() {
       ctx.save();
-      ctx.globalAlpha = 0.45;
+      ctx.globalAlpha = state.biome === "metro" ? 0.22 : 0.45;
       ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--grid").trim();
       ctx.lineWidth = 1;
       const gap = 34;
@@ -588,8 +873,14 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const darkTheme = document.documentElement.getAttribute("data-theme") === "dark";
-      const skyA = darkTheme ? "#030718" : "#d6f3ff";
-      const skyB = darkTheme ? "#091427" : "#b6e7ff";
+      const inMetro = state.biome === "metro";
+      const skyA = inMetro
+        ? (darkTheme ? "#05070e" : "#9bafc4")
+        : (darkTheme ? "#030718" : "#d6f3ff");
+      const skyB = inMetro
+        ? (darkTheme ? "#0d1118" : "#6d8798")
+        : (darkTheme ? "#091427" : "#b6e7ff");
+
       const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
       skyGrad.addColorStop(0, skyA);
       skyGrad.addColorStop(1, skyB);
@@ -599,8 +890,9 @@
       drawGrid();
 
       const p = state.player;
-      const primary = getComputedStyle(document.documentElement).getPropertyValue("--primary").trim();
-      const secondary = getComputedStyle(document.documentElement).getPropertyValue("--secondary").trim();
+      const css = getComputedStyle(document.documentElement);
+      const primary = css.getPropertyValue("--primary").trim();
+      const secondary = css.getPropertyValue("--secondary").trim();
 
       ctx.save();
       ctx.shadowBlur = 26;
@@ -611,15 +903,88 @@
       ctx.fill();
       ctx.restore();
 
-      for (const e of state.enemies) {
+      for (const pickup of state.pickups) {
         ctx.save();
-        ctx.fillStyle = secondary;
-        ctx.shadowBlur = 24;
-        ctx.shadowColor = secondary;
+        ctx.fillStyle = "#8effcf";
+        ctx.shadowBlur = 16;
+        ctx.shadowColor = "#8effcf";
         ctx.beginPath();
-        ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+        ctx.arc(pickup.x, pickup.y, pickup.r, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
+      }
+
+      for (const e of state.enemies) {
+        ctx.save();
+        if (e.type === "drone") {
+          ctx.fillStyle = secondary;
+          ctx.shadowBlur = 20;
+          ctx.shadowColor = secondary;
+          ctx.beginPath();
+          ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "#ffffffa0";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        } else if (e.type === "mutant") {
+          ctx.fillStyle = "#ff834f";
+          ctx.shadowBlur = 20;
+          ctx.shadowColor = "#ff834f";
+          ctx.beginPath();
+          ctx.ellipse(e.x, e.y, e.r * 1.05, e.r * 0.82, 0, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.fillStyle = "#ffb24f";
+          ctx.shadowBlur = 18;
+          ctx.shadowColor = "#ffb24f";
+          ctx.fillRect(e.x - e.r, e.y - e.r, e.r * 2, e.r * 2);
+          if (e.lock > 0) {
+            ctx.strokeStyle = "#ffdf84";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(e.x, e.y);
+            ctx.lineTo(e.aimX, e.aimY);
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
+
+      for (const s of state.shots) {
+        ctx.save();
+        ctx.fillStyle = "#ffc966";
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = "#ffc966";
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      for (const w of state.weatherEvents) {
+        if (w.type === "storm") {
+          if (w.warn > 0) {
+            ctx.fillStyle = "#f8df5945";
+            ctx.fillRect(w.x - w.width * 0.5, 0, w.width, canvas.height);
+          } else {
+            ctx.fillStyle = "#ffe99195";
+            ctx.fillRect(w.x - 3, 0, 6, canvas.height);
+            ctx.strokeStyle = "#fff7d6";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(w.x, 0);
+            ctx.lineTo(w.x + Math.sin(state.tick * 0.5) * 8, canvas.height);
+            ctx.stroke();
+          }
+        } else {
+          const cloud = ctx.createRadialGradient(w.x, w.y, 10, w.x, w.y, w.r);
+          cloud.addColorStop(0, "rgba(122, 228, 142, 0.34)");
+          cloud.addColorStop(1, "rgba(122, 228, 142, 0)");
+          ctx.fillStyle = cloud;
+          ctx.beginPath();
+          ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
       for (const part of state.particles) {
@@ -636,6 +1001,29 @@
       ctx.font = "700 25px Orbitron, sans-serif";
       ctx.fillText(`Score ${Math.floor(state.score)}`, 18, 38);
       ctx.fillText(`Best ${state.best}`, 18, 72);
+      ctx.font = "700 18px Chakra Petch, sans-serif";
+      ctx.fillText(zoneName(), 18, 102);
+      ctx.fillText(`Battery ${Math.round(state.battery)}%`, 18, 124);
+
+      if (state.biome === "metro") {
+        const lightStrength = 100 + state.battery * 3.2;
+        const angle = Math.atan2(p.facingY, p.facingX);
+        const spread = 0.72;
+
+        ctx.save();
+        ctx.fillStyle = darkTheme ? "rgba(0,0,0,0.72)" : "rgba(43,55,82,0.52)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.arc(p.x, p.y, lightStrength, angle - spread, angle + spread);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 68 + state.battery * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
 
       if (!state.running) {
         ctx.fillStyle = darkTheme ? "#000000b8" : "#d8eeffbf";
@@ -646,7 +1034,9 @@
         ctx.font = "800 56px Orbitron, sans-serif";
         ctx.fillText("Flatlined", canvas.width / 2, canvas.height / 2 - 24);
         ctx.font = "700 24px Chakra Petch, sans-serif";
-        ctx.fillText("Press R or Restart", canvas.width / 2, canvas.height / 2 + 22);
+        const reason = state.cause ? `Cause: ${state.cause}` : "Press R or Restart";
+        ctx.fillText(reason, canvas.width / 2, canvas.height / 2 + 20);
+        ctx.fillText("Press R or Restart", canvas.width / 2, canvas.height / 2 + 54);
         ctx.textAlign = "left";
       }
     }
@@ -668,9 +1058,7 @@
       state.keys.delete(event.key.toLowerCase());
     });
 
-    restartButton.addEventListener("click", () => {
-      reset();
-    });
+    restartButton.addEventListener("click", reset);
 
     themeSelect.addEventListener("change", (event) => {
       setTheme(event.target.value);
@@ -688,6 +1076,7 @@
     const savedTheme = localStorage.getItem(THEME_KEY);
     setTheme(savedTheme === "bright" ? "bright" : "dark");
     resizeMatrix();
+    updateHud();
     window.addEventListener("resize", resizeMatrix);
 
     frame();
