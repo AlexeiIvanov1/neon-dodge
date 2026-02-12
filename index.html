@@ -244,6 +244,12 @@
           <option value="dark">Dark</option>
           <option value="bright">Bright</option>
         </select>
+        <span class="chip">Zone</span>
+        <select id="biomeSelect" aria-label="Zone selector">
+          <option value="auto">Auto</option>
+          <option value="city">Neon City</option>
+          <option value="metro">Metro Tunnel</option>
+        </select>
         <span class="chip">Audio</span>
         <select id="musicSelect" aria-label="Music selector">
           <option value="off">Off</option>
@@ -276,6 +282,7 @@
     const ctx = canvas.getContext("2d");
     const restartButton = document.getElementById("restart");
     const themeSelect = document.getElementById("themeSelect");
+    const biomeSelect = document.getElementById("biomeSelect");
     const musicSelect = document.getElementById("musicSelect");
     const missionState = document.getElementById("missionState");
     const biomeState = document.getElementById("biomeState");
@@ -283,6 +290,7 @@
     const audioState = document.getElementById("audioState");
 
     const THEME_KEY = "neon_dodge_theme";
+    const BIOME_MODE_KEY = "neon_dodge_biome_mode";
 
     const state = {
       player: { x: 120, y: 270, r: 14, speed: 5.3, facingX: 1, facingY: 0 },
@@ -300,6 +308,7 @@
       running: true,
       tick: 0,
       biome: "city",
+      biomeMode: "auto",
       biomeTimer: 1600,
       battery: 100,
       missionsCompleted: 0,
@@ -348,6 +357,20 @@
       document.documentElement.setAttribute("data-theme", theme);
       themeSelect.value = theme;
       localStorage.setItem(THEME_KEY, theme);
+    }
+
+    function applyBiomeMode(mode) {
+      state.biomeMode = mode;
+      biomeSelect.value = mode;
+      localStorage.setItem(BIOME_MODE_KEY, mode);
+
+      if (mode === "city") {
+        state.biome = "city";
+      } else if (mode === "metro") {
+        state.biome = "metro";
+      } else {
+        state.biomeTimer = 900;
+      }
     }
 
     function zoneName() {
@@ -523,6 +546,7 @@
     }
 
     function switchBiome() {
+      if (state.biomeMode !== "auto") return;
       state.biome = state.biome === "city" ? "metro" : "city";
       state.biomeTimer = 1400 + Math.floor(Math.random() * 500);
       state.weatherCooldown = 120 + Math.floor(Math.random() * 180);
@@ -576,7 +600,7 @@
       state.weatherCooldown = 320;
       state.running = true;
       state.tick = 0;
-      state.biome = "city";
+      state.biome = state.biomeMode === "metro" ? "metro" : "city";
       state.biomeTimer = 1600;
       state.battery = 100;
       state.missionsCompleted = 0;
@@ -855,10 +879,12 @@
       if (state.running) {
         state.tick += 1;
         state.spawnTimer -= 1;
-        state.biomeTimer -= 1;
+        if (state.biomeMode === "auto") {
+          state.biomeTimer -= 1;
 
-        if (state.biomeTimer <= 0) {
-          switchBiome();
+          if (state.biomeTimer <= 0) {
+            switchBiome();
+          }
         }
 
         if (state.spawnTimer <= 0) {
@@ -1194,6 +1220,10 @@
       setTheme(event.target.value);
     });
 
+    biomeSelect.addEventListener("change", (event) => {
+      applyBiomeMode(event.target.value);
+    });
+
     musicSelect.addEventListener("change", (event) => {
       const trackName = event.target.value;
       if (trackName === "off") {
@@ -1205,6 +1235,8 @@
 
     const savedTheme = localStorage.getItem(THEME_KEY);
     setTheme(savedTheme === "bright" ? "bright" : "dark");
+    const savedBiomeMode = localStorage.getItem(BIOME_MODE_KEY);
+    applyBiomeMode(savedBiomeMode === "city" || savedBiomeMode === "metro" ? savedBiomeMode : "auto");
     resizeMatrix();
     updateHud();
     window.addEventListener("resize", resizeMatrix);
