@@ -920,7 +920,7 @@
           moved = true;
         }
 
-        if (!moved) {
+        if (!moved && p.facingX === 0 && p.facingY === 0) {
           p.facingX = 1;
           p.facingY = 0;
         }
@@ -1316,22 +1316,56 @@
       }
 
       if (state.biome === "metro") {
-        const lightStrength = 100 + state.battery * 3.2;
-        const angle = Math.atan2(p.facingY, p.facingX);
-        const spread = 0.72;
+        const lightStrength = 180 + state.battery * 2.8;
+        const aimX = p.facingX === 0 && p.facingY === 0 ? 1 : p.facingX;
+        const aimY = p.facingX === 0 && p.facingY === 0 ? 0 : p.facingY;
+        const angle = Math.atan2(aimY, aimX);
+        const spread = 0.64;
+        const flicker = 0.92 + Math.sin(state.tick * 0.24) * 0.03;
+        const beamStrength = (0.42 + state.battery / 190) * flicker;
 
         ctx.save();
-        ctx.fillStyle = darkTheme ? "rgba(0,0,0,0.72)" : "rgba(43,55,82,0.52)";
+        ctx.fillStyle = darkTheme ? "rgba(3, 7, 12, 0.48)" : "rgba(29, 43, 74, 0.36)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.globalCompositeOperation = "destination-out";
+
+        ctx.globalCompositeOperation = "screen";
+        ctx.save();
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
         ctx.arc(p.x, p.y, lightStrength, angle - spread, angle + spread);
         ctx.closePath();
-        ctx.fill();
+        ctx.clip();
+
+        const beamX = p.x + Math.cos(angle) * lightStrength * 0.62;
+        const beamY = p.y + Math.sin(angle) * lightStrength * 0.62;
+        const beam = ctx.createRadialGradient(p.x, p.y, 10, beamX, beamY, lightStrength);
+        beam.addColorStop(0, `rgba(255, 244, 212, ${0.55 * beamStrength})`);
+        beam.addColorStop(0.35, `rgba(196, 228, 255, ${0.42 * beamStrength})`);
+        beam.addColorStop(0.72, `rgba(118, 186, 255, ${0.2 * beamStrength})`);
+        beam.addColorStop(1, "rgba(0, 0, 0, 0)");
+        ctx.fillStyle = beam;
+        ctx.fillRect(p.x - lightStrength, p.y - lightStrength, lightStrength * 2, lightStrength * 2);
+        ctx.restore();
+
+        const nearGlow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 110 + state.battery * 0.65);
+        nearGlow.addColorStop(0, "rgba(255, 250, 228, 0.55)");
+        nearGlow.addColorStop(0.42, "rgba(220, 241, 255, 0.24)");
+        nearGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
+        ctx.fillStyle = nearGlow;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 68 + state.battery * 0.5, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, 110 + state.battery * 0.65, 0, Math.PI * 2);
         ctx.fill();
+
+        ctx.globalCompositeOperation = "source-over";
+        ctx.strokeStyle = `rgba(201, 233, 255, ${0.22 + state.battery / 420})`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(
+          p.x + Math.cos(angle) * (lightStrength * 0.9),
+          p.y + Math.sin(angle) * (lightStrength * 0.9)
+        );
+        ctx.stroke();
         ctx.restore();
       }
 
