@@ -62,7 +62,7 @@
       position: fixed;
       inset: 0;
       pointer-events: none;
-      z-index: 0;
+      z-index: 1;
     }
 
     body::before {
@@ -83,11 +83,21 @@
       animation: pulse 4.6s ease-in-out infinite;
     }
 
+    #matrixRain {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0.62;
+    }
+
     .shell {
       width: min(96vw, 1060px);
       margin: clamp(10px, 2vw, 24px) auto;
       position: relative;
-      z-index: 1;
+      z-index: 2;
       border: 1px solid var(--frame);
       border-radius: 16px;
       padding: clamp(10px, 1.7vw, 18px);
@@ -223,6 +233,8 @@
   </style>
 </head>
 <body>
+  <canvas id="matrixRain" aria-hidden="true"></canvas>
+
   <main class="shell">
     <header class="hud">
       <div class="title" data-text="Neon Dodge 2077">Neon Dodge 2077</div>
@@ -255,6 +267,8 @@
   </main>
 
   <script>
+    const matrixCanvas = document.getElementById("matrixRain");
+    const matrixCtx = matrixCanvas.getContext("2d");
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
     const restartButton = document.getElementById("restart");
@@ -281,6 +295,11 @@
     let sequenceTimer;
     let beatIndex = 0;
     let activeTrack = "off";
+    const matrix = {
+      fontSize: 16,
+      chars: "01@#$%&*+-<>[]{}ABCDEFGHIJKLMNOPQRSTUVWXYZ".split(""),
+      drops: [],
+    };
 
     const tracks = {
       night_runner: {
@@ -309,6 +328,39 @@
       document.documentElement.setAttribute("data-theme", theme);
       themeSelect.value = theme;
       localStorage.setItem(THEME_KEY, theme);
+    }
+
+    function resizeMatrix() {
+      matrixCanvas.width = window.innerWidth;
+      matrixCanvas.height = window.innerHeight;
+      const cols = Math.ceil(matrixCanvas.width / matrix.fontSize);
+      matrix.drops = Array.from({ length: cols }, () => Math.random() * matrixCanvas.height / matrix.fontSize);
+      matrixCtx.font = `${matrix.fontSize}px Chakra Petch, monospace`;
+    }
+
+    function drawMatrix() {
+      const darkTheme = document.documentElement.getAttribute("data-theme") === "dark";
+      const fade = darkTheme ? "rgba(3, 8, 14, 0.18)" : "rgba(211, 242, 255, 0.2)";
+      const trail = darkTheme ? "#37ff9f" : "#0f58ff";
+      const head = darkTheme ? "#d8ffe8" : "#162d70";
+
+      matrixCtx.fillStyle = fade;
+      matrixCtx.fillRect(0, 0, matrixCanvas.width, matrixCanvas.height);
+
+      for (let i = 0; i < matrix.drops.length; i += 1) {
+        const x = i * matrix.fontSize;
+        const y = matrix.drops[i] * matrix.fontSize;
+        const char = matrix.chars[Math.floor(Math.random() * matrix.chars.length)];
+
+        matrixCtx.fillStyle = Math.random() > 0.9 ? head : trail;
+        matrixCtx.fillText(char, x, y);
+
+        if (y > matrixCanvas.height && Math.random() > 0.975) {
+          matrix.drops[i] = 0;
+        } else {
+          matrix.drops[i] += 0.8 + Math.random() * 0.75;
+        }
+      }
     }
 
     function freqFromSemitone(root, offset) {
@@ -600,6 +652,7 @@
     }
 
     function frame() {
+      drawMatrix();
       update();
       draw();
       requestAnimationFrame(frame);
@@ -634,6 +687,8 @@
 
     const savedTheme = localStorage.getItem(THEME_KEY);
     setTheme(savedTheme === "bright" ? "bright" : "dark");
+    resizeMatrix();
+    window.addEventListener("resize", resizeMatrix);
 
     frame();
   </script>
