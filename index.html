@@ -207,6 +207,90 @@
       flex-wrap: wrap;
     }
 
+    .overlay-btn {
+      border: 1px solid color-mix(in srgb, var(--secondary) 55%, transparent);
+      background: color-mix(in srgb, var(--bg-0) 62%, transparent);
+      color: var(--ink);
+      border-radius: 10px;
+      padding: 0.42rem 0.62rem;
+      font: 600 0.85rem var(--font-body);
+      cursor: pointer;
+    }
+
+    .settings-panel {
+      position: fixed;
+      right: 16px;
+      top: 16px;
+      z-index: 5;
+      width: min(92vw, 320px);
+      background: color-mix(in srgb, var(--panel) 90%, transparent);
+      border: 1px solid var(--frame);
+      border-radius: 12px;
+      padding: 10px;
+      display: none;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 18px 35px #0000004d;
+    }
+
+    .settings-panel.open {
+      display: block;
+    }
+
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      font-size: 0.9rem;
+    }
+
+    .settings-panel input[type="range"] {
+      width: 120px;
+    }
+
+    .touch-ui {
+      position: fixed;
+      inset: auto 0 8px 0;
+      z-index: 4;
+      display: none;
+      justify-content: space-between;
+      padding: 0 10px;
+      pointer-events: none;
+    }
+
+    .touch-cluster {
+      display: grid;
+      grid-template-columns: repeat(3, 52px);
+      grid-template-rows: repeat(2, 52px);
+      gap: 6px;
+      pointer-events: auto;
+    }
+
+    .touch-btn {
+      border: 1px solid var(--frame);
+      background: color-mix(in srgb, var(--bg-0) 72%, transparent);
+      color: var(--ink);
+      border-radius: 10px;
+      font: 700 0.9rem var(--font-body);
+    }
+
+    .touch-fire {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      align-self: end;
+      margin-right: 10px;
+    }
+
+    .touch-dash {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      align-self: end;
+      margin-right: 10px;
+      margin-bottom: 74px;
+    }
+
     @keyframes glitch {
       0%, 85%, 100% { transform: translate(0, 0); }
       87% { transform: translate(1px, -1px); }
@@ -228,6 +312,9 @@
     @media (max-width: 720px) {
       .controls {
         justify-content: flex-start;
+      }
+      .touch-ui {
+        display: flex;
       }
     }
   </style>
@@ -258,6 +345,7 @@
           <option value="sunset_grid">Sunset Grid</option>
           <option value="overclock">Overclock</option>
         </select>
+        <button id="settingsBtn" class="overlay-btn">Settings</button>
         <button id="restart">Restart</button>
       </div>
     </header>
@@ -276,15 +364,60 @@
     </footer>
   </main>
 
+  <aside id="settingsPanel" class="settings-panel" aria-label="Settings panel">
+    <div class="settings-grid">
+      <label for="sfxVolume">SFX Volume</label>
+      <input id="sfxVolume" type="range" min="0" max="100" value="70" />
+      <label for="musicVolume">Music Volume</label>
+      <input id="musicVolume" type="range" min="0" max="100" value="50" />
+      <label for="qualityMode">Quality</label>
+      <select id="qualityMode">
+        <option value="high">High</option>
+        <option value="low">Low</option>
+      </select>
+      <label for="colorblindMode">Colorblind</label>
+      <select id="colorblindMode">
+        <option value="off">Off</option>
+        <option value="on">On</option>
+      </select>
+      <label for="fireKeyInput">Fire Key</label>
+      <input id="fireKeyInput" type="text" value="f" maxlength="1" />
+      <label for="dashKeyInput">Dash Key</label>
+      <input id="dashKeyInput" type="text" value="shift" maxlength="5" />
+    </div>
+  </aside>
+
+  <div class="touch-ui" id="touchUi" aria-hidden="true">
+    <div class="touch-cluster">
+      <button class="touch-btn" data-key="arrowup" style="grid-column:2;grid-row:1;">U</button>
+      <button class="touch-btn" data-key="arrowleft" style="grid-column:1;grid-row:2;">L</button>
+      <button class="touch-btn" data-key="arrowdown" style="grid-column:2;grid-row:2;">D</button>
+      <button class="touch-btn" data-key="arrowright" style="grid-column:3;grid-row:2;">R</button>
+    </div>
+    <button class="touch-btn touch-dash" id="touchDash">Dash</button>
+    <button class="touch-btn touch-fire" id="touchFire">Fire</button>
+  </div>
+
   <script>
     const matrixCanvas = document.getElementById("matrixRain");
     const matrixCtx = matrixCanvas.getContext("2d");
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
     const restartButton = document.getElementById("restart");
+    const settingsBtn = document.getElementById("settingsBtn");
+    const settingsPanel = document.getElementById("settingsPanel");
     const themeSelect = document.getElementById("themeSelect");
     const biomeSelect = document.getElementById("biomeSelect");
     const musicSelect = document.getElementById("musicSelect");
+    const sfxVolume = document.getElementById("sfxVolume");
+    const musicVolume = document.getElementById("musicVolume");
+    const qualityMode = document.getElementById("qualityMode");
+    const colorblindMode = document.getElementById("colorblindMode");
+    const fireKeyInput = document.getElementById("fireKeyInput");
+    const dashKeyInput = document.getElementById("dashKeyInput");
+    const touchUi = document.getElementById("touchUi");
+    const touchFire = document.getElementById("touchFire");
+    const touchDash = document.getElementById("touchDash");
     const missionState = document.getElementById("missionState");
     const biomeState = document.getElementById("biomeState");
     const batteryState = document.getElementById("batteryState");
@@ -293,6 +426,9 @@
 
     const THEME_KEY = "neon_dodge_theme";
     const BIOME_MODE_KEY = "neon_dodge_biome_mode";
+    const SETTINGS_KEY = "neon_dodge_settings";
+    const SCRAP_KEY = "neon_dodge_scrap";
+    const UPGRADE_KEY = "neon_dodge_upgrades";
 
     const state = {
       player: { x: 120, y: 270, r: 14, speed: 5.3, facingX: 1, facingY: 0, aimX: null, aimY: null },
@@ -315,12 +451,25 @@
       biomeTimer: 1600,
       battery: 100,
       missionsCompleted: 0,
+      missionKind: "sync",
+      missionCounter: 0,
+      surviveTicks: 0,
+      killsThisMission: 0,
       missionPhase: "travel",
       missionProgress: 0,
       missionTarget: 700,
       extraction: null,
+      bossActive: false,
+      difficulty: 1,
       firing: false,
+      dash: {
+        stamina: 100,
+        staminaMax: 100,
+        cooldown: 0,
+        cooldownMax: 36,
+      },
       weapon: {
+        type: "pistol",
         ammo: 12,
         ammoMax: 12,
         reloadTimer: 0,
@@ -329,11 +478,27 @@
         fireRate: 8,
         damage: 1,
       },
+      upgrades: { damage: 0, maxHealth: 0, dash: 0 },
+      health: 100,
+      healthMax: 100,
+      scrap: Number(localStorage.getItem(SCRAP_KEY) || 0),
+      settings: {
+        sfxVolume: 0.7,
+        musicVolume: 0.5,
+        quality: "high",
+        colorblind: "off",
+        fireKey: "f",
+        dashKey: "shift",
+      },
+      hitFlash: 0,
+      screenShake: 0,
+      lastHitAngle: 0,
       cause: "",
     };
 
     let audioCtx;
     let masterGain;
+    let sfxGain;
     let sequenceTimer;
     let beatIndex = 0;
 
@@ -366,6 +531,88 @@
       },
     };
 
+    const weaponProfiles = {
+      pistol: { ammoMax: 12, fireRate: 8, damage: 1, reloadDuration: 82, spread: 0.02, speed: 10.2 },
+      smg: { ammoMax: 24, fireRate: 4, damage: 0.7, reloadDuration: 96, spread: 0.065, speed: 10.5 },
+      shotgun: { ammoMax: 6, fireRate: 18, damage: 0.6, reloadDuration: 118, spread: 0.24, speed: 9.2, pellets: 5 },
+    };
+
+    function applyWeaponProfile(type) {
+      const p = weaponProfiles[type];
+      state.weapon.type = type;
+      state.weapon.ammoMax = p.ammoMax;
+      state.weapon.ammo = Math.min(state.weapon.ammo, p.ammoMax);
+      state.weapon.fireRate = p.fireRate;
+      state.weapon.reloadDuration = p.reloadDuration;
+      state.weapon.damage = p.damage + state.upgrades.damage * 0.16;
+      if (state.weapon.ammo <= 0) state.weapon.ammo = p.ammoMax;
+    }
+
+    function cycleWeapon() {
+      const order = ["pistol", "smg", "shotgun"];
+      const idx = order.indexOf(state.weapon.type);
+      applyWeaponProfile(order[(idx + 1) % order.length]);
+      playSfx("swap");
+    }
+
+    function saveSettings() {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+      localStorage.setItem(UPGRADE_KEY, JSON.stringify(state.upgrades));
+      localStorage.setItem(SCRAP_KEY, String(state.scrap));
+    }
+
+    function loadSettings() {
+      try {
+        const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+        const u = JSON.parse(localStorage.getItem(UPGRADE_KEY) || "{}");
+        state.settings = { ...state.settings, ...s };
+        state.upgrades = { ...state.upgrades, ...u };
+      } catch (_) {}
+      sfxVolume.value = String(Math.round(state.settings.sfxVolume * 100));
+      musicVolume.value = String(Math.round(state.settings.musicVolume * 100));
+      qualityMode.value = state.settings.quality;
+      colorblindMode.value = state.settings.colorblind;
+      fireKeyInput.value = state.settings.fireKey;
+      dashKeyInput.value = state.settings.dashKey;
+    }
+
+    function applySettingsToRuntime() {
+      document.documentElement.style.filter = state.settings.colorblind === "on" ? "saturate(0.78) contrast(1.08)" : "";
+      if (masterGain) masterGain.gain.value = 0.16 * state.settings.musicVolume;
+      if (sfxGain) sfxGain.gain.value = state.settings.sfxVolume;
+    }
+
+    function isFireKey(key) {
+      return key === state.settings.fireKey || key === " ";
+    }
+
+    function isDashKey(key) {
+      return key === state.settings.dashKey;
+    }
+
+    function upgradeCost(type) {
+      const level = state.upgrades[type];
+      return 40 + level * 35;
+    }
+
+    function tryUpgrade(type) {
+      const cost = upgradeCost(type);
+      if (state.scrap < cost) return false;
+      state.scrap -= cost;
+      state.upgrades[type] += 1;
+      if (type === "maxHealth") {
+        state.healthMax = 100 + state.upgrades.maxHealth * 12;
+        state.health = Math.min(state.healthMax, state.health + 12);
+      }
+      if (type === "dash") {
+        state.dash.staminaMax = 100 + state.upgrades.dash * 14;
+      }
+      applyWeaponProfile(state.weapon.type);
+      saveSettings();
+      playSfx("upgrade");
+      return true;
+    }
+
     function setTheme(theme) {
       document.documentElement.setAttribute("data-theme", theme);
       themeSelect.value = theme;
@@ -392,8 +639,14 @@
 
     function updateHud() {
       if (state.missionPhase === "travel") {
-        const pct = Math.min(100, Math.floor((state.missionProgress / state.missionTarget) * 100));
-        missionState.textContent = `Objective: Sync signal ${pct}%`;
+        if (state.missionKind === "sync") {
+          const pct = Math.min(100, Math.floor((state.missionProgress / state.missionTarget) * 100));
+          missionState.textContent = `Objective: Sync signal ${pct}%`;
+        } else if (state.missionKind === "hunt") {
+          missionState.textContent = `Objective: Eliminate ${state.missionCounter}/${state.missionTarget}`;
+        } else {
+          missionState.textContent = `Objective: Survive ${Math.ceil((state.missionTarget - state.missionCounter) / 60)}s`;
+        }
       } else {
         const holdPct = state.extraction
           ? Math.min(100, Math.floor((state.extraction.hold / state.extraction.holdNeed) * 100))
@@ -401,14 +654,17 @@
         const timer = state.extraction ? Math.ceil(state.extraction.timer / 60) : 0;
         missionState.textContent = `Objective: Reach extraction ${holdPct}% (${timer}s)`;
       }
+      if (state.bossActive) {
+        missionState.textContent = `Objective: BOSS ENGAGEMENT`;
+      }
       biomeState.textContent = `Zone: ${zoneName()}`;
       batteryState.textContent = `Battery: ${Math.round(state.battery)}%`;
       batteryState.style.color = state.battery < 22 ? "var(--danger)" : "var(--muted)";
       if (state.weapon.reloadTimer > 0) {
-        weaponState.textContent = `Weapon: Reloading ${Math.ceil(state.weapon.reloadTimer / 60)}s`;
+        weaponState.textContent = `Weapon: ${state.weapon.type.toUpperCase()} Reloading ${Math.ceil(state.weapon.reloadTimer / 60)}s | HP ${Math.round(state.health)} | Dash ${Math.round(state.dash.stamina)}`;
         weaponState.style.color = "var(--danger)";
       } else {
-        weaponState.textContent = `Weapon: ${state.weapon.ammo}/${state.weapon.ammoMax}`;
+        weaponState.textContent = `Weapon: ${state.weapon.type.toUpperCase()} ${state.weapon.ammo}/${state.weapon.ammoMax} | HP ${Math.round(state.health)} | Dash ${Math.round(state.dash.stamina)} | Scrap ${state.scrap}`;
         weaponState.style.color = state.weapon.ammo <= 3 ? "var(--danger)" : "var(--muted)";
       }
     }
@@ -454,15 +710,39 @@
       if (!audioCtx) {
         audioCtx = new AudioContext();
         masterGain = audioCtx.createGain();
-        masterGain.gain.value = 0.16;
+        sfxGain = audioCtx.createGain();
+        masterGain.gain.value = 0.16 * state.settings.musicVolume;
+        sfxGain.gain.value = state.settings.sfxVolume;
         masterGain.connect(audioCtx.destination);
+        sfxGain.connect(audioCtx.destination);
       }
       if (audioCtx.state === "suspended") {
         audioCtx.resume();
       }
     }
 
-    function synthHit({ freq, time, dur, type, gain, detune = 0 }) {
+    function playSfx(kind) {
+      ensureAudio();
+      if (!audioCtx || !sfxGain) return;
+      const now = audioCtx.currentTime;
+      if (kind === "shoot") {
+        synthHit({ freq: 520 + Math.random() * 70, time: now, dur: 0.06, type: "triangle", gain: 0.05, bus: sfxGain });
+      } else if (kind === "hit") {
+        synthHit({ freq: 190 + Math.random() * 30, time: now, dur: 0.08, type: "sawtooth", gain: 0.045, bus: sfxGain });
+      } else if (kind === "reload") {
+        synthHit({ freq: 280, time: now, dur: 0.08, type: "square", gain: 0.038, bus: sfxGain });
+        synthHit({ freq: 350, time: now + 0.08, dur: 0.06, type: "square", gain: 0.034, bus: sfxGain });
+      } else if (kind === "dash") {
+        synthHit({ freq: 720, time: now, dur: 0.07, type: "triangle", gain: 0.04, bus: sfxGain });
+      } else if (kind === "upgrade") {
+        synthHit({ freq: 440, time: now, dur: 0.07, type: "sine", gain: 0.045, bus: sfxGain });
+        synthHit({ freq: 660, time: now + 0.09, dur: 0.09, type: "sine", gain: 0.04, bus: sfxGain });
+      } else if (kind === "swap") {
+        synthHit({ freq: 300, time: now, dur: 0.06, type: "triangle", gain: 0.035, bus: sfxGain });
+      }
+    }
+
+    function synthHit({ freq, time, dur, type, gain, detune = 0, bus = masterGain }) {
       const osc = audioCtx.createOscillator();
       const env = audioCtx.createGain();
 
@@ -475,7 +755,7 @@
       env.gain.exponentialRampToValueAtTime(0.0001, time + dur);
 
       osc.connect(env);
-      env.connect(masterGain);
+      env.connect(bus);
       osc.start(time);
       osc.stop(time + dur + 0.03);
     }
@@ -563,6 +843,7 @@
       state.cause = cause;
       state.best = Math.max(state.best, Math.floor(state.score));
       localStorage.setItem("neon_dodge_best", String(state.best));
+      saveSettings();
       burst(state.player.x, state.player.y, "#ff5b9f");
     }
 
@@ -593,16 +874,94 @@
 
     function completeExtraction() {
       state.missionsCompleted += 1;
+      state.scrap += 18 + Math.floor(state.difficulty * 6);
       state.missionPhase = "travel";
       state.missionProgress = 0;
-      state.missionTarget = Math.min(1700, 700 + state.missionsCompleted * 170);
       state.battery = Math.min(100, state.battery + 16);
       state.extraction = null;
       if (state.enemies.length > 6) {
         state.enemies.splice(0, Math.floor(state.enemies.length * 0.45));
       }
+      if (state.missionsCompleted % 3 === 0) {
+        spawnBoss();
+      }
+      chooseMission();
+      saveSettings();
       burst(state.player.x + 40, state.player.y, "#23f7ff");
       burst(state.player.x + 70, state.player.y - 20, "#8effcf");
+    }
+
+    function chooseMission() {
+      const pool = ["sync", "hunt", "survive"];
+      state.missionKind = pool[Math.floor(Math.random() * pool.length)];
+      state.missionCounter = 0;
+      state.surviveTicks = 0;
+      state.killsThisMission = 0;
+      if (state.missionKind === "sync") {
+        state.missionTarget = Math.min(1900, 700 + state.missionsCompleted * 170);
+      } else if (state.missionKind === "hunt") {
+        state.missionTarget = 8 + state.missionsCompleted * 2;
+      } else {
+        state.missionTarget = 620 + state.missionsCompleted * 120;
+      }
+    }
+
+    function spawnBoss() {
+      state.enemies.push({
+        type: "boss",
+        x: canvas.width + 120,
+        y: canvas.height / 2,
+        r: 44,
+        hp: 38 + state.missionsCompleted * 8,
+        speed: 1.8 + state.difficulty * 0.2,
+        phase: 0,
+        fireCd: 42,
+        lock: 0,
+        aimX: 0,
+        aimY: 0,
+        cooldown: 0,
+        charge: 0,
+        chargeVy: 0,
+      });
+      state.bossActive = true;
+    }
+
+    function takeDamage(amount, sx, sy, cause) {
+      if (!state.running) return;
+      state.health = Math.max(0, state.health - amount);
+      state.hitFlash = Math.max(state.hitFlash, 0.55);
+      state.screenShake = Math.max(state.screenShake, Math.min(22, amount * 0.5));
+      const dx = sx - state.player.x;
+      const dy = sy - state.player.y;
+      state.lastHitAngle = Math.atan2(dy, dx);
+      playSfx("hit");
+      if (state.health <= 0) {
+        endRun(cause);
+      }
+    }
+
+    function triggerDash() {
+      if (!state.running) return;
+      if (state.dash.cooldown > 0 || state.dash.stamina < 18) return;
+      const p = state.player;
+      let dx = 0;
+      let dy = 0;
+      if (state.keys.has("arrowup") || state.keys.has("w")) dy -= 1;
+      if (state.keys.has("arrowdown") || state.keys.has("s")) dy += 1;
+      if (state.keys.has("arrowleft") || state.keys.has("a")) dx -= 1;
+      if (state.keys.has("arrowright") || state.keys.has("d")) dx += 1;
+      if (dx === 0 && dy === 0) {
+        dx = p.facingX || 1;
+        dy = p.facingY || 0;
+      }
+      const len = Math.hypot(dx, dy) || 1;
+      const power = 62 + state.upgrades.dash * 10;
+      p.x += (dx / len) * power;
+      p.y += (dy / len) * power;
+      state.dash.stamina = Math.max(0, state.dash.stamina - 22);
+      state.dash.cooldown = Math.max(12, state.dash.cooldownMax - state.upgrades.dash * 3);
+      state.screenShake = Math.max(state.screenShake, 8);
+      playSfx("dash");
     }
 
     function reset() {
@@ -627,25 +986,42 @@
       state.biome = state.biomeMode === "metro" ? "metro" : "city";
       state.biomeTimer = 1600;
       state.battery = 100;
+      state.healthMax = 100 + state.upgrades.maxHealth * 12;
+      state.health = state.healthMax;
       state.missionsCompleted = 0;
       state.missionPhase = "travel";
       state.missionProgress = 0;
       state.missionTarget = 700;
       state.extraction = null;
+      state.bossActive = false;
+      state.difficulty = 1;
       state.firing = false;
-      state.weapon.ammo = state.weapon.ammoMax;
+      state.dash.staminaMax = 100 + state.upgrades.dash * 14;
+      state.dash.stamina = state.dash.staminaMax;
+      state.dash.cooldown = 0;
       state.weapon.reloadTimer = 0;
       state.weapon.fireCooldown = 0;
+      applyWeaponProfile(state.weapon.type);
+      state.weapon.ammo = state.weapon.ammoMax;
+      chooseMission();
       state.cause = "";
     }
 
     function updateMission() {
       if (!state.running) return;
+      if (state.bossActive) return;
 
       if (state.missionPhase === "travel") {
-        state.missionProgress += 1 + state.score / 4000;
-        if (state.missionProgress >= state.missionTarget) {
-          startExtraction();
+        if (state.missionKind === "sync") {
+          state.missionProgress += 1 + state.score / 4000;
+          if (state.missionProgress >= state.missionTarget) startExtraction();
+        } else if (state.missionKind === "hunt") {
+          state.missionCounter = state.killsThisMission;
+          if (state.missionCounter >= state.missionTarget) startExtraction();
+        } else {
+          state.surviveTicks += 1;
+          state.missionCounter = state.surviveTicks;
+          if (state.missionCounter >= state.missionTarget) startExtraction();
         }
         return;
       }
@@ -694,19 +1070,21 @@
       const radiusByType = { drone: 14, mutant: 19, turret: 16 };
       const speedByType = { drone: 4.2, mutant: 3.25, turret: 2.8 };
       const r = radiusByType[type] + Math.random() * 8;
+      const hpScale = 1 + state.difficulty * 0.18;
 
       state.enemies.push({
         type,
         x: canvas.width + r,
         y: r + Math.random() * (canvas.height - r * 2),
         r,
-        hp: type === "mutant" ? 3 : (type === "turret" ? 4 : 2),
-        speed: speedByType[type] + Math.random() * 1.7 + state.score / 500,
+        hp: Math.ceil((type === "mutant" ? 3 : (type === "turret" ? 4 : 2)) * hpScale),
+        speed: speedByType[type] + Math.random() * 1.7 + state.score / 500 + state.difficulty * 0.25,
         phase: Math.random() * Math.PI * 2,
         cooldown: 90 + Math.random() * 80,
         charge: 0,
         chargeVy: 0,
         fireCd: 70 + Math.random() * 80,
+        blink: Math.random() * 100,
         lock: 0,
         aimX: 0,
         aimY: 0,
@@ -749,17 +1127,24 @@
 
       const p = state.player;
       const angle = getPlayerAimAngle();
-      state.playerShots.push({
-        x: p.x + Math.cos(angle) * (p.r + 4),
-        y: p.y + Math.sin(angle) * (p.r + 4),
-        vx: Math.cos(angle) * 10.2,
-        vy: Math.sin(angle) * 10.2,
-        r: 3.2,
-        damage: w.damage,
-      });
+      const profile = weaponProfiles[w.type];
+      const pellets = profile.pellets || 1;
+      for (let i = 0; i < pellets; i += 1) {
+        const spread = (Math.random() - 0.5) * 2 * profile.spread;
+        const shotAngle = angle + spread;
+        state.playerShots.push({
+          x: p.x + Math.cos(shotAngle) * (p.r + 4),
+          y: p.y + Math.sin(shotAngle) * (p.r + 4),
+          vx: Math.cos(shotAngle) * profile.speed,
+          vy: Math.sin(shotAngle) * profile.speed,
+          r: 3.2,
+          damage: w.damage,
+        });
+      }
       w.ammo -= 1;
       w.fireCooldown = w.fireRate;
       burst(p.x + Math.cos(angle) * (p.r + 3), p.y + Math.sin(angle) * (p.r + 3), "#fff5c1");
+      playSfx("shoot");
       if (w.ammo <= 0) {
         w.reloadTimer = w.reloadDuration;
       }
@@ -773,6 +1158,7 @@
         if (w.reloadTimer <= 0) {
           w.ammo = w.ammoMax;
           w.reloadTimer = 0;
+          playSfx("reload");
         }
       }
       if (state.firing) firePlayerShot();
@@ -795,7 +1181,15 @@
             hit = true;
             if (e.hp <= 0) {
               burst(e.x, e.y, "#ffb07a");
+              playSfx("hit");
               state.score += 26;
+              state.killsThisMission += 1;
+              state.scrap += 3;
+              if (e.type === "boss") {
+                state.score += 250;
+                state.scrap += 60;
+                state.bossActive = false;
+              }
               state.enemies.splice(j, 1);
             }
             break;
@@ -836,12 +1230,21 @@
       }
     }
 
-    function spawnBatteryPickup() {
+    function spawnLoot(kind = "battery") {
+      const colorByKind = {
+        battery: "#8effcf",
+        ammo: "#9dc4ff",
+        med: "#ff97a8",
+        boost: "#ffd993",
+      };
       state.pickups.push({
         x: canvas.width + 22,
         y: 60 + Math.random() * (canvas.height - 120),
         r: 10,
         amount: 26 + Math.random() * 20,
+        kind,
+        color: colorByKind[kind] || "#8effcf",
+        life: 850,
       });
     }
 
@@ -851,8 +1254,8 @@
         if (state.weatherCooldown <= 0) {
           spawnWeatherEvent();
           state.weatherCooldown = state.biome === "city"
-            ? 210 + Math.floor(Math.random() * 180)
-            : 170 + Math.floor(Math.random() * 160);
+            ? 210 + Math.floor(Math.random() * 180) - Math.floor(state.difficulty * 10)
+            : 170 + Math.floor(Math.random() * 160) - Math.floor(state.difficulty * 9);
         }
       }
 
@@ -865,7 +1268,7 @@
           } else if (w.strike > 0) {
             w.strike -= 1;
             if (state.running && Math.abs(state.player.x - w.x) < w.width * 0.5) {
-              endRun("Electrocuted");
+              takeDamage(22, w.x, state.player.y, "Electrocuted");
             }
           } else {
             state.weatherEvents.splice(i, 1);
@@ -878,6 +1281,7 @@
 
           if (state.running && Math.hypot(dx, dy) < w.r + state.player.r) {
             state.battery = Math.max(0, state.battery - 0.36);
+            takeDamage(0.35, w.x, w.y, "Toxic exposure");
             if (state.battery <= 0) endRun("Toxic exposure");
           }
 
@@ -889,11 +1293,15 @@
     }
 
     function updatePickups() {
-      if (state.running && state.biome === "metro") {
+      if (state.running) {
         state.pickupTimer -= 1;
-        if (state.pickupTimer <= 0 && state.battery < 95) {
-          spawnBatteryPickup();
-          state.pickupTimer = 260 + Math.floor(Math.random() * 260);
+        if (state.pickupTimer <= 0) {
+          const roll = Math.random();
+          if (roll < 0.36) spawnLoot("battery");
+          else if (roll < 0.62) spawnLoot("ammo");
+          else if (roll < 0.83) spawnLoot("med");
+          else spawnLoot("boost");
+          state.pickupTimer = 220 + Math.floor(Math.random() * 220);
         }
       }
 
@@ -905,13 +1313,24 @@
         const dx = state.player.x - p.x;
         const dy = state.player.y - p.y;
         if (state.running && Math.hypot(dx, dy) < state.player.r + p.r) {
-          state.battery = Math.min(100, state.battery + p.amount);
-          burst(p.x, p.y, "#8effcf");
+          if (p.kind === "battery") {
+            state.battery = Math.min(100, state.battery + p.amount);
+          } else if (p.kind === "ammo") {
+            state.weapon.ammo = Math.min(state.weapon.ammoMax, state.weapon.ammo + 4);
+          } else if (p.kind === "med") {
+            state.health = Math.min(state.healthMax, state.health + 18);
+          } else {
+            state.weapon.fireCooldown = Math.max(0, state.weapon.fireCooldown - 2);
+            state.dash.stamina = Math.min(state.dash.staminaMax, state.dash.stamina + 20);
+          }
+          burst(p.x, p.y, p.color);
           state.pickups.splice(i, 1);
           continue;
         }
 
+        p.life -= 1;
         if (p.x + p.r < -16) state.pickups.splice(i, 1);
+        if (p.life <= 0) state.pickups.splice(i, 1);
       }
     }
 
@@ -924,7 +1343,9 @@
         const dx = state.player.x - s.x;
         const dy = state.player.y - s.y;
         if (state.running && Math.hypot(dx, dy) < state.player.r + s.r) {
-          endRun("Sniped");
+          takeDamage(17, s.x, s.y, "Sniped");
+          state.shots.splice(i, 1);
+          continue;
         }
 
         if (s.x < -20 || s.x > canvas.width + 20 || s.y < -20 || s.y > canvas.height + 20) {
@@ -942,6 +1363,11 @@
         if (e.type === "drone") {
           e.x -= e.speed;
           e.y += Math.sin((state.tick + e.phase * 40) * 0.095) * 1.7;
+          e.blink = (e.blink || 0) - 1;
+          if (e.blink <= 0) {
+            e.speed += 0.15;
+            e.blink = 80 + Math.random() * 120;
+          }
         } else if (e.type === "mutant") {
           if (e.charge > 0) {
             e.charge -= 1;
@@ -957,6 +1383,26 @@
               e.chargeVy = (p.y - e.y) / 26;
               e.cooldown = 85 + Math.random() * 75;
             }
+          }
+        } else if (e.type === "boss") {
+          if (e.x > canvas.width * 0.74) e.x -= 0.8;
+          e.phase += 0.035;
+          e.y += Math.sin(e.phase) * 2.2;
+          e.fireCd -= 1;
+          if (e.fireCd <= 0) {
+            for (let a = -1; a <= 1; a += 1) {
+              const tx = p.x + a * 35;
+              const ty = p.y + a * 15;
+              const ang = Math.atan2(ty - e.y, tx - e.x);
+              state.shots.push({
+                x: e.x,
+                y: e.y,
+                vx: Math.cos(ang) * 5.2,
+                vy: Math.sin(ang) * 5.2,
+                r: 5,
+              });
+            }
+            e.fireCd = 44;
           }
         } else {
           if (e.x > canvas.width * 0.78) e.x -= 1.5;
@@ -979,11 +1425,13 @@
         const dx = p.x - e.x;
         const dy = p.y - e.y;
         if (state.running && Math.hypot(dx, dy) <= p.r + e.r) {
-          const reason = e.type === "mutant" ? "Mauled" : (e.type === "turret" ? "Crushed" : "Shredded");
-          endRun(reason);
+          const reason = e.type === "mutant" ? "Mauled" : (e.type === "turret" ? "Crushed" : (e.type === "boss" ? "Overrun" : "Shredded"));
+          const damage = e.type === "boss" ? 32 : (e.type === "mutant" ? 24 : 18);
+          takeDamage(damage, e.x, e.y, reason);
         }
 
         if (e.x + e.r < -30) {
+          if (e.type === "boss") state.bossActive = false;
           state.enemies.splice(i, 1);
           burst(e.x, e.y, "#23f7ff");
         }
@@ -994,6 +1442,9 @@
       if (state.running) {
         state.tick += 1;
         state.spawnTimer -= 1;
+        state.difficulty = 1 + state.score / 1400 + state.missionsCompleted * 0.12;
+        if (state.dash.cooldown > 0) state.dash.cooldown -= 1;
+        state.dash.stamina = Math.min(state.dash.staminaMax, state.dash.stamina + 0.16 + state.upgrades.dash * 0.03);
         if (state.biomeMode === "auto") {
           state.biomeTimer -= 1;
 
@@ -1003,8 +1454,8 @@
         }
 
         if (state.spawnTimer <= 0) {
-          spawnEnemy();
-          state.spawnTimer = Math.max(12, 36 - Math.floor(state.score / 120));
+          if (!state.bossActive) spawnEnemy();
+          state.spawnTimer = Math.max(9, 34 - Math.floor(state.score / 120) - Math.floor(state.difficulty * 2));
         }
 
         const p = state.player;
@@ -1069,6 +1520,7 @@
         updateWeapon();
         updatePlayerShots();
         updateShots();
+        state.screenShake *= 0.85;
       }
 
       for (let i = state.particles.length - 1; i >= 0; i -= 1) {
@@ -1080,6 +1532,8 @@
         p.life -= 1;
         if (p.life <= 0) state.particles.splice(i, 1);
       }
+
+      state.hitFlash = Math.max(0, state.hitFlash - 0.03);
 
       updateHud();
     }
@@ -1275,6 +1729,26 @@
       ctx.restore();
     }
 
+    function drawBossModel(e) {
+      drawGroundShadow(e.x + 6, e.y + e.r + 12, e.r * 1.8, e.r * 0.7);
+      ctx.save();
+      ctx.translate(e.x, e.y);
+      ctx.shadowBlur = 22;
+      ctx.shadowColor = "#ff697f";
+      const shell = ctx.createRadialGradient(-e.r * 0.3, -e.r * 0.4, 2, 0, 0, e.r * 1.45);
+      shell.addColorStop(0, "#ffe0e7");
+      shell.addColorStop(0.35, "#ff6e9f");
+      shell.addColorStop(1, "#411531");
+      ctx.fillStyle = shell;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, e.r * 1.08, e.r * 0.94, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#fff6";
+      ctx.fillRect(e.r * 0.2, -2, e.r * 0.72, 4);
+      ctx.restore();
+    }
+
     function getTorchParams() {
       const p = state.player;
       const aimX = p.facingX === 0 && p.facingY === 0 ? 1 : p.facingX;
@@ -1310,7 +1784,12 @@
     }
 
     function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const shake = state.settings.quality === "low" ? 0 : state.screenShake;
+      const sx = (Math.random() - 0.5) * shake;
+      const sy = (Math.random() - 0.5) * shake;
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.clearRect(-40, -40, canvas.width + 80, canvas.height + 80);
 
       const darkTheme = document.documentElement.getAttribute("data-theme") === "dark";
       const inMetro = state.biome === "metro";
@@ -1365,7 +1844,7 @@
           pickup.r * 1.1
         );
         pick.addColorStop(0, "#f3fff9");
-        pick.addColorStop(0.35, "#8effcf");
+        pick.addColorStop(0.35, pickup.color || "#8effcf");
         pick.addColorStop(1, "#1d7f65");
         ctx.fillStyle = pick;
         ctx.shadowBlur = 14;
@@ -1386,8 +1865,17 @@
         ctx.globalAlpha = visibility;
         if (e.type === "drone") {
           drawDroneModel(e, secondary);
+          if ((e.blink || 0) < 16) {
+            ctx.strokeStyle = "rgba(255, 220, 160, 0.75)";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, e.r + 6, 0, Math.PI * 2);
+            ctx.stroke();
+          }
         } else if (e.type === "mutant") {
           drawMutantModel(e);
+        } else if (e.type === "boss") {
+          drawBossModel(e);
         } else {
           drawTurretModel(e);
           ctx.save();
@@ -1401,6 +1889,13 @@
             ctx.stroke();
           }
           ctx.restore();
+        }
+        if (e.hp > 0) {
+          ctx.fillStyle = "rgba(14,22,40,0.75)";
+          ctx.fillRect(e.x - e.r, e.y - e.r - 10, e.r * 2, 4);
+          ctx.fillStyle = e.type === "boss" ? "#ff83a9" : "#8adfff";
+          const maxHp = e.type === "boss" ? (38 + state.missionsCompleted * 8) : (e.type === "mutant" ? 5 : 4);
+          ctx.fillRect(e.x - e.r, e.y - e.r - 10, e.r * 2 * Math.max(0, Math.min(1, e.hp / maxHp)), 4);
         }
         ctx.restore();
       }
@@ -1483,6 +1978,7 @@
       ctx.fillText(zoneName(), 18, 102);
       ctx.fillText(`Battery ${Math.round(state.battery)}%`, 18, 124);
       ctx.fillText(`Missions ${state.missionsCompleted}`, 18, 146);
+      ctx.fillText(`Difficulty x${state.difficulty.toFixed(2)}`, 18, 168);
 
       if (state.extraction) {
         const e = state.extraction;
@@ -1567,8 +2063,24 @@
         ctx.fillText(reason, canvas.width / 2, canvas.height / 2 + 20);
         ctx.fillText("Press R or Restart", canvas.width / 2, canvas.height / 2 + 54);
         ctx.fillText(`Missions completed: ${state.missionsCompleted}`, canvas.width / 2, canvas.height / 2 + 88);
+        ctx.fillText(`Scrap: ${state.scrap} | Upgrades: [1]DMG [2]HP [3]DASH`, canvas.width / 2, canvas.height / 2 + 120);
         ctx.textAlign = "left";
       }
+
+      if (state.hitFlash > 0) {
+        ctx.fillStyle = `rgba(255, 52, 90, ${state.hitFlash * 0.28})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const hx = state.player.x + Math.cos(state.lastHitAngle) * 52;
+        const hy = state.player.y + Math.sin(state.lastHitAngle) * 52;
+        ctx.strokeStyle = "rgba(255,120,145,0.9)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(state.player.x, state.player.y);
+        ctx.lineTo(hx, hy);
+        ctx.stroke();
+      }
+
+      ctx.restore();
     }
 
     function frame() {
@@ -1581,17 +2093,27 @@
     window.addEventListener("keydown", (event) => {
       const key = event.key.toLowerCase();
       state.keys.add(key);
-      if (key === " " || key === "f") {
+      if (isFireKey(key)) {
         event.preventDefault();
         state.firing = true;
       }
+      if (isDashKey(key)) {
+        event.preventDefault();
+        triggerDash();
+      }
+      if (key === "q") {
+        cycleWeapon();
+      }
+      if (!state.running && key === "1") tryUpgrade("damage");
+      if (!state.running && key === "2") tryUpgrade("maxHealth");
+      if (!state.running && key === "3") tryUpgrade("dash");
       if (!state.running && key === "r") reset();
     });
 
     window.addEventListener("keyup", (event) => {
       const key = event.key.toLowerCase();
       state.keys.delete(key);
-      if (key === " " || key === "f") {
+      if (isFireKey(key)) {
         state.firing = false;
       }
     });
@@ -1612,7 +2134,35 @@
       state.firing = false;
     });
 
+    touchUi.querySelectorAll("[data-key]").forEach((btn) => {
+      const key = btn.dataset.key;
+      const down = (ev) => {
+        ev.preventDefault();
+        state.keys.add(key);
+      };
+      const up = (ev) => {
+        ev.preventDefault();
+        state.keys.delete(key);
+      };
+      btn.addEventListener("touchstart", down, { passive: false });
+      btn.addEventListener("touchend", up, { passive: false });
+      btn.addEventListener("mousedown", down);
+      btn.addEventListener("mouseup", up);
+      btn.addEventListener("mouseleave", up);
+    });
+
+    touchFire.addEventListener("touchstart", (ev) => { ev.preventDefault(); state.firing = true; }, { passive: false });
+    touchFire.addEventListener("touchend", (ev) => { ev.preventDefault(); state.firing = false; }, { passive: false });
+    touchFire.addEventListener("mousedown", () => { state.firing = true; });
+    touchFire.addEventListener("mouseup", () => { state.firing = false; });
+    touchDash.addEventListener("touchstart", (ev) => { ev.preventDefault(); triggerDash(); }, { passive: false });
+    touchDash.addEventListener("mousedown", () => { triggerDash(); });
+
     restartButton.addEventListener("click", reset);
+
+    settingsBtn.addEventListener("click", () => {
+      settingsPanel.classList.toggle("open");
+    });
 
     themeSelect.addEventListener("change", (event) => {
       setTheme(event.target.value);
@@ -1631,10 +2181,48 @@
       }
     });
 
+    sfxVolume.addEventListener("input", () => {
+      state.settings.sfxVolume = Number(sfxVolume.value) / 100;
+      applySettingsToRuntime();
+      saveSettings();
+    });
+    musicVolume.addEventListener("input", () => {
+      state.settings.musicVolume = Number(musicVolume.value) / 100;
+      applySettingsToRuntime();
+      saveSettings();
+    });
+    qualityMode.addEventListener("change", () => {
+      state.settings.quality = qualityMode.value;
+      saveSettings();
+    });
+    colorblindMode.addEventListener("change", () => {
+      state.settings.colorblind = colorblindMode.value;
+      applySettingsToRuntime();
+      saveSettings();
+    });
+    fireKeyInput.addEventListener("change", () => {
+      const v = fireKeyInput.value.toLowerCase().trim() || "f";
+      state.settings.fireKey = v;
+      saveSettings();
+    });
+    dashKeyInput.addEventListener("change", () => {
+      const v = dashKeyInput.value.toLowerCase().trim() || "shift";
+      state.settings.dashKey = v;
+      saveSettings();
+    });
+
     const savedTheme = localStorage.getItem(THEME_KEY);
     setTheme(savedTheme === "bright" ? "bright" : "dark");
     const savedBiomeMode = localStorage.getItem(BIOME_MODE_KEY);
     applyBiomeMode(savedBiomeMode === "city" || savedBiomeMode === "metro" ? savedBiomeMode : "auto");
+    loadSettings();
+    applySettingsToRuntime();
+    state.healthMax = 100 + state.upgrades.maxHealth * 12;
+    state.health = state.healthMax;
+    state.dash.staminaMax = 100 + state.upgrades.dash * 14;
+    state.dash.stamina = state.dash.staminaMax;
+    applyWeaponProfile(state.weapon.type);
+    chooseMission();
     resizeMatrix();
     updateHud();
     window.addEventListener("resize", resizeMatrix);
